@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How a CNN Actually Sees (Explained Properly)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js"></script>
+<style>
+  :root{
+    --ink:#1B1F27;
+    --paper:#F6F3EC;
+    --paper-dim:#ECE7DA;
+    --dark:#11141B;
+    --dark-2:#181C26;
+    --amber:#FFB454;
+    --amber-soft:#FFD9A0;
+    --wire-cool:#5C7A99;
+    --wire-cool-dim:#33425a;
+    --muted:#8B92A1;
+    --muted-dark:#6b7280;
+    --red:#E7714F;
+    --green:#5FAE82;
+    --rule: rgba(255,255,255,0.08);
+    --rule-dark: rgba(20,20,20,0.10);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    font-size:17px;
+    line-height:1.72;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{ font-family:'Space Grotesk',sans-serif; font-weight:600; letter-spacing:-0.01em; margin:0; }
+  .mono{ font-family:'JetBrains Mono',monospace; }
+  a{ color:inherit; }
+  p{ margin:0 0 1.15em 0; }
+  .wrap{ max-width:760px; margin:0 auto; padding:0 28px; }
+  .wrap-wide{ max-width:920px; margin:0 auto; padding:0 28px; }
+
+  /* ===== HERO ===== */
+  .hero{
+    background:radial-gradient(ellipse 900px 500px at 50% -10%, #1d2433 0%, var(--dark) 60%);
+    color:var(--paper);
+    padding:104px 0 84px;
+    position:relative;
+    overflow:hidden;
+  }
+  .hero .eyebrow{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px; letter-spacing:0.14em; text-transform:uppercase;
+    color:var(--amber); margin-bottom:22px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow .dot{ width:6px; height:6px; border-radius:50%; background:var(--amber); box-shadow:0 0 8px 2px var(--amber); }
+  .hero h1{ font-size:50px; line-height:1.1; color:#F4F1E8; max-width:680px; }
+  .hero h1 em{ font-style:normal; color:var(--amber); }
+  .hero .sub{ margin-top:24px; font-size:18.5px; color:#B9BFCC; max-width:560px; }
+  @media (max-width:640px){ .hero{ padding:80px 0 60px; } .hero h1{ font-size:34px; } }
+
+  section{ padding:80px 0; }
+  section.dark{ background:var(--dark); color:#E7E5DC; }
+  section.dark h2, section.dark h3{ color:#F4F1E8; }
+  section.paper{ background:var(--paper); }
+  section.paper-dim{ background:var(--paper-dim); }
+  .kicker{
+    font-family:'JetBrains Mono',monospace; font-size:12px;
+    letter-spacing:0.13em; text-transform:uppercase; color:var(--amber);
+  }
+  section.paper .kicker, section.paper-dim .kicker{ color:#B5662E; }
+  h2.title{ font-size:33px; margin-top:10px; margin-bottom:26px; }
+  h3.sub-title{ font-size:21px; margin-top:42px; margin-bottom:14px; }
+  .lede{ font-size:19px; color:var(--muted-dark); max-width:620px; }
+  section.dark .lede{ color:var(--muted); }
+
+  figure{ margin:32px 0; }
+  figure svg{ width:100%; height:auto; display:block; }
+  figcaption{
+    font-family:'JetBrains Mono',monospace; font-size:12.5px;
+    color:var(--muted-dark); margin-top:12px; padding-top:10px;
+    border-top:1px solid var(--rule-dark);
+  }
+  section.dark figcaption{ color:var(--muted); border-top:1px solid var(--rule); }
+  .fig-card{ background:var(--dark); border-radius:14px; padding:30px 26px 18px; }
+  section.dark .fig-card{ background:#0B0D12; border:1px solid var(--rule); }
+  .fig-card.light{ background:#fff; border:1px solid #E3DECE; }
+  .fig-card.light figcaption{ color:var(--muted-dark); border-top:1px solid #ECE6D6; }
+
+  .def{
+    border-left:3px solid var(--amber);
+    background:rgba(255,180,84,0.07);
+    padding:16px 20px; border-radius:0 8px 8px 0; margin:24px 0;
+  }
+  .def .term{
+    font-family:'JetBrains Mono',monospace; font-size:12px;
+    letter-spacing:0.08em; text-transform:uppercase;
+    color:#B5662E; display:block; margin-bottom:6px;
+  }
+  section.dark .def{ background:rgba(255,180,84,0.10); }
+  section.dark .def .term{ color:var(--amber); }
+
+  .aside{
+    border-left:3px solid var(--wire-cool);
+    background:rgba(92,122,153,0.07);
+    padding:16px 20px; border-radius:0 8px 8px 0; margin:24px 0; font-size:15.5px;
+  }
+  .aside .term{
+    font-family:'JetBrains Mono',monospace; font-size:11.5px;
+    letter-spacing:0.08em; text-transform:uppercase;
+    color:#3d5670; display:block; margin-bottom:6px;
+  }
+  section.dark .aside{ background:rgba(92,122,153,0.12); }
+  section.dark .aside .term{ color:#9db7cf; }
+
+  .math-box{
+    background:#fff; border:1px solid #E3DECE; border-radius:10px;
+    padding:20px 24px; margin:22px 0; overflow-x:auto;
+  }
+  section.dark .math-box{ background:#0B0D12; border-color:var(--rule); }
+
+  table{ width:100%; border-collapse:collapse; margin:26px 0; font-size:15.5px; }
+  th,td{ padding:12px 14px; text-align:left; border-bottom:1px solid var(--rule-dark); }
+  section.dark th, section.dark td{ border-bottom:1px solid var(--rule); }
+  th{ font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:0.07em; text-transform:uppercase; color:var(--muted-dark); }
+  section.dark th{ color:var(--muted); }
+  td .mono{ color:var(--amber); }
+  section.paper td .mono, section.paper-dim td .mono{ color:#B5662E; }
+
+  .seriesnav{ display:flex; flex-wrap:wrap; gap:10px; margin-top:34px; }
+  .seriesnav a{
+    font-family:'JetBrains Mono',monospace; font-size:12.5px; padding:8px 14px;
+    border:1px solid var(--rule); border-radius:999px; text-decoration:none;
+    color:#C9CDD6; transition:border-color .2s, color .2s;
+  }
+  .seriesnav a:hover{ border-color:var(--amber); color:var(--amber); }
+
+  footer{ background:var(--dark); color:var(--muted); padding:60px 0 50px; font-size:14.5px; }
+  footer a{ color:var(--amber); text-decoration:none; border-bottom:1px solid rgba(255,180,84,0.3); }
+  hr.thin{ border:none; border-top:1px solid var(--rule); margin:30px 0; }
+
+  ul.clean{ padding-left:0; list-style:none; margin:18px 0; }
+  ul.clean li{ padding-left:22px; position:relative; margin-bottom:10px; }
+  ul.clean li::before{
+    content:""; position:absolute; left:0; top:9px;
+    width:7px; height:7px; border-radius:50%;
+    background:var(--amber); box-shadow:0 0 6px 1px rgba(255,180,84,0.6);
+  }
+  ol.steps{ padding-left:22px; margin:18px 0; }
+  ol.steps li{ margin-bottom:8px; }
+
+  .twocol{ display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+  @media (max-width:680px){ .twocol{ grid-template-columns:1fr; } }
+  .threecol{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px; }
+  @media (max-width:780px){ .threecol{ grid-template-columns:1fr; } }
+
+  .pixel-grid{
+    display:inline-grid; gap:2px;
+    font-family:'JetBrains Mono',monospace; font-size:11px;
+  }
+  .px{ width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:3px; font-weight:500; }
+  .px-hi{ background:#FFB454; color:#1B1F27; }
+  .px-lo{ background:#33425a; color:#8B92A1; }
+  .px-neu{ background:#22283a; color:#6b7280; }
+  .px-act{ background:#5FAE82; color:#fff; border:2px solid #3d8c60; }
+
+  .pulse{ animation: pulseGlow 2.6s ease-in-out infinite; }
+  @keyframes pulseGlow{ 0%,100%{ opacity:0.55; } 50%{ opacity:1; } }
+  @media (prefers-reduced-motion: reduce){ .pulse{ animation:none; } }
+
+  /* conv demo interactive */
+  .conv-demo{ display:flex; gap:28px; align-items:flex-start; flex-wrap:wrap; margin:28px 0; }
+  .conv-demo-grid{ display:grid; gap:3px; }
+  .conv-cell{
+    width:38px; height:38px; display:flex; align-items:center; justify-content:center;
+    border-radius:5px; font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:500;
+    background:#22283a; color:#6b7280; border:1px solid #33425a;
+    transition:background .2s, color .2s, border-color .2s;
+  }
+  .conv-cell.hi{ background:#FFB454; color:#1B1F27; border-color:#FFB454; }
+  .conv-cell.filter{ background:#5C7A99; color:#E7E5DC; border-color:#7090b0; }
+  .conv-cell.out{ background:#5FAE82; color:#fff; border-color:#3d8c60; }
+  .conv-cell.out-pending{ background:#33425a; color:#5b6880; border-color:#33425a; }
+  .demo-btn{
+    padding:8px 20px; border-radius:8px; border:1px solid var(--wire-cool-dim);
+    background:transparent; color:#C9CDD6; font-family:'JetBrains Mono',monospace;
+    font-size:12.5px; cursor:pointer; transition:border-color .2s, color .2s;
+  }
+  .demo-btn:hover{ border-color:var(--amber); color:var(--amber); }
+  .demo-label{ font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:0.08em; }
+</style>
+</head>
+<body>
+
+<!-- ================= HERO ================= -->
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow"><span class="dot pulse"></span>BLOG 02 · CONVOLUTIONAL NEURAL NETWORKS</div>
+    <h1>A 3×3 grid of nine numbers, <em>dragged across an image</em>, is how a machine learns to see.</h1>
+    <p class="sub">I went through 3Blue1Brown's convolution video, sat through MIT's 6.S191 CNN lecture twice, and read the full CS231n notes. This is what I wrote alongside all of that — what a filter actually computes, what "feature map" actually means, and the part that took me the longest to really get: why the same tiny window, repeated enough times and stacked deep enough, can eventually tell a cat from a car.</p>
+
+    <figure style="margin-top:48px;">
+      <div class="fig-card" style="background:#0B0D12; border:1px solid rgba(255,255,255,0.08);">
+        <svg viewBox="0 0 700 200" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrowH" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L8,3 L0,6 Z" fill="#5C7A99"/>
+            </marker>
+          </defs>
+          <!-- Input image block -->
+          <rect x="10" y="40" width="80" height="120" rx="6" fill="#181C26" stroke="#33425a"/>
+          <text x="50" y="108" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#8B92A1">Input</text>
+          <text x="50" y="122" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#8B92A1">Image</text>
+          <!-- arrow -->
+          <line x1="90" y1="100" x2="118" y2="100" stroke="#5C7A99" marker-end="url(#arrowH)"/>
+          <!-- Conv block (taller, multiple feature maps) -->
+          <rect x="120" y="22" width="80" height="156" rx="6" fill="#181C26" stroke="#FFB454" stroke-width="1.5"/>
+          <rect x="130" y="30" width="60" height="50" rx="4" fill="#22283a" stroke="#FFB454" opacity="0.7"/>
+          <rect x="133" y="90" width="60" height="50" rx="4" fill="#22283a" stroke="#FFB454" opacity="0.5"/>
+          <rect x="136" y="150" width="60" height="20" rx="4" fill="#22283a" stroke="#FFB454" opacity="0.3"/>
+          <text x="160" y="182" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#FFB454">CONV + ReLU</text>
+          <!-- arrow -->
+          <line x1="200" y1="100" x2="228" y2="100" stroke="#5C7A99" marker-end="url(#arrowH)"/>
+          <!-- Pooling -->
+          <rect x="230" y="40" width="80" height="120" rx="6" fill="#181C26" stroke="#5C7A99"/>
+          <rect x="240" y="50" width="56" height="46" rx="4" fill="#22283a" stroke="#5C7A99" opacity="0.7"/>
+          <rect x="243" y="104" width="56" height="46" rx="4" fill="#22283a" stroke="#5C7A99" opacity="0.4"/>
+          <text x="270" y="176" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5C7A99">POOL</text>
+          <!-- arrow -->
+          <line x1="310" y1="100" x2="338" y2="100" stroke="#5C7A99" marker-end="url(#arrowH)"/>
+          <!-- Deeper Conv -->
+          <rect x="340" y="30" width="80" height="140" rx="6" fill="#181C26" stroke="#FFB454" stroke-width="1.5"/>
+          <rect x="350" y="38" width="60" height="36" rx="4" fill="#22283a" stroke="#FFB454" opacity="0.7"/>
+          <rect x="353" y="80" width="60" height="36" rx="4" fill="#22283a" stroke="#FFB454" opacity="0.5"/>
+          <rect x="356" y="122" width="60" height="36" rx="4" fill="#22283a" stroke="#FFB454" opacity="0.3"/>
+          <text x="380" y="182" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#FFB454">CONV + ReLU</text>
+          <!-- arrow -->
+          <line x1="420" y1="100" x2="448" y2="100" stroke="#5C7A99" marker-end="url(#arrowH)"/>
+          <!-- FC -->
+          <rect x="450" y="50" width="80" height="100" rx="6" fill="#181C26" stroke="#5C7A99"/>
+          <g stroke="#33425a" stroke-width="0.8">
+            <line x1="466" y1="70" x2="514" y2="70"/><line x1="466" y1="84" x2="514" y2="84"/>
+            <line x1="466" y1="98" x2="514" y2="98"/><line x1="466" y1="112" x2="514" y2="112"/>
+            <line x1="466" y1="126" x2="514" y2="126"/>
+          </g>
+          <text x="490" y="170" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5C7A99">Flatten + FC</text>
+          <!-- arrow -->
+          <line x1="530" y1="100" x2="558" y2="100" stroke="#5C7A99" marker-end="url(#arrowH)"/>
+          <!-- Output -->
+          <rect x="560" y="60" width="100" height="80" rx="6" fill="#181C26" stroke="#5FAE82"/>
+          <text x="610" y="97" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#5FAE82">Softmax</text>
+          <text x="610" y="113" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#8B92A1">Output</text>
+          <!-- label note -->
+          <text x="350" y="14" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#6b7280">filters double as you go deeper (32 → 64 → 128) while spatial size shrinks</text>
+        </svg>
+      </div>
+      <figcaption>FIG 1 — the full CNN pipeline. Filters detect local patterns, pooling compresses them, and the fully-connected layers at the end use those compressed patterns to make a classification decision.</figcaption>
+    </figure>
+  </div>
+</header>
+
+<!-- ================= 01. WHY NOT JUST USE A PLAIN NEURAL NETWORK ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">01 · The Problem That Started Everything</div>
+    <h2 class="title">Why a plain neural network can't really see</h2>
+    <p class="lede">Before CNNs existed, people tried to classify images by flattening them into a list of pixels and feeding that list into a regular fully-connected network. It mostly didn't work, and the reason is worth sitting with.</p>
+
+    <p>A modest 200×200 image in full colour isn't three numbers. It's 200 × 200 × 3 = <strong>120,000 numbers</strong>. Feed those into the first hidden layer of a plain network, and a single neuron in that layer needs its own weight connecting to every one of those 120,000 inputs. Multiply that by the number of neurons in the layer — already in the millions of parameters for one layer alone. Training that becomes impossibly expensive. More importantly: even if it trained, it wouldn't generalize. A dog in the top-left corner of an image and the same dog in the bottom-right look completely different to a flat list of pixel values. The network would have to learn "dog" from scratch for every possible position. That's not learning what a dog looks like — it's just memorizing arrangements of pixels.</p>
+
+    <div class="def">
+      <span class="term">The key insight CNNs are built on</span>
+      Images have <em>spatial structure</em>. Nearby pixels are related. A dog's ear is made of adjacent pixels. A wheel exists in a local patch of an image. You don't need to compare pixel 1 with pixel 100,000 to understand local structure. CNNs exploit this by applying small filters that look at local regions — not the whole image at once — and reusing those same filters everywhere in the image.
+    </div>
+
+    <p>This is the "X or X?" problem MIT's 6.S191 lecture opens with. Show a network two images of the letter X — one centered, one shifted slightly to the right — and both are numerically almost entirely different pixel matrices. A flat neural network has no reason to think they're the same thing. A CNN finds the same diagonal strokes regardless of where in the image they appear, because it looks for them locally, everywhere.</p>
+
+    <figure>
+      <div class="fig-card" style="background:#0B0D12; border:1px solid rgba(255,255,255,0.08);">
+        <svg viewBox="0 0 660 200" xmlns="http://www.w3.org/2000/svg">
+          <!-- Left X grid (8x8, centered) -->
+          <g font-family="JetBrains Mono" font-size="9" text-anchor="middle">
+            <!-- render a rough X with 1/-1 values -->
+            <text x="56" y="20" fill="#6b7280" font-size="10">Pixel matrix — X centered</text>
+            <!-- rows of -1/1 showing an X pattern -->
+            <rect x="10" y="26" width="180" height="160" rx="4" fill="#181C26"/>
+            <!-- X pattern cells: top-left to bottom-right diagonal + top-right to bottom-left -->
+            <!-- I'll use colored blocks to indicate 1 (bright) vs -1 (dark) -->
+            <!-- Row 0: 1 . . . . . . 1 -->
+            <rect x="14" y="30" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="34" y="30" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="54" y="30" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="74" y="30" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="94" y="30" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="114" y="30" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="134" y="30" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="154" y="30" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <!-- Row 1 -->
+            <rect x="14" y="50" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="34" y="50" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="54" y="50" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="74" y="50" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="94" y="50" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="114" y="50" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="134" y="50" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="154" y="50" width="18" height="18" rx="2" fill="#22283a"/>
+            <!-- Row 2 -->
+            <rect x="14" y="70" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="34" y="70" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="54" y="70" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="74" y="70" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="94" y="70" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="114" y="70" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="134" y="70" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="154" y="70" width="18" height="18" rx="2" fill="#22283a"/>
+            <!-- Row 3 - center -->
+            <rect x="14" y="90" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="34" y="90" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="54" y="90" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="74" y="90" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="94" y="90" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="114" y="90" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="134" y="90" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="154" y="90" width="18" height="18" rx="2" fill="#22283a"/>
+            <!-- Row 4 -->
+            <rect x="14" y="110" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="34" y="110" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="54" y="110" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="74" y="110" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="94" y="110" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="114" y="110" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="134" y="110" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="154" y="110" width="18" height="18" rx="2" fill="#22283a"/>
+            <!-- Row 5 -->
+            <rect x="14" y="130" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="34" y="130" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="54" y="130" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="74" y="130" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="94" y="130" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="114" y="130" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="134" y="130" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="154" y="130" width="18" height="18" rx="2" fill="#22283a"/>
+            <!-- Row 6 -->
+            <rect x="14" y="150" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="34" y="150" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="54" y="150" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="74" y="150" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="94" y="150" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="114" y="150" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="134" y="150" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="154" y="150" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+
+            <!-- right label -->
+            <text x="330" y="20" fill="#6b7280" font-size="10">Same X, shifted right</text>
+            <rect x="210" y="26" width="180" height="160" rx="4" fill="#181C26"/>
+            <!-- Shift right by 2 -->
+            <rect x="214" y="30" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="234" y="30" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="254" y="30" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="274" y="30" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="294" y="30" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="314" y="30" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="334" y="30" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="354" y="30" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+
+            <rect x="214" y="50" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="234" y="50" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="254" y="50" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="274" y="50" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="294" y="50" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="314" y="50" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="334" y="50" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="354" y="50" width="18" height="18" rx="2" fill="#22283a"/>
+
+            <!-- center rows etc - abbreviated for space -->
+            <rect x="214" y="70" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="234" y="70" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="254" y="70" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="274" y="70" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="294" y="70" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="314" y="70" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="334" y="70" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="354" y="70" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+
+            <rect x="214" y="90" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="234" y="90" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="254" y="90" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="274" y="90" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="294" y="90" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="314" y="90" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="334" y="90" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="354" y="90" width="18" height="18" rx="2" fill="#22283a"/>
+
+            <rect x="214" y="110" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="234" y="110" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="254" y="110" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="274" y="110" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="294" y="110" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="314" y="110" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="334" y="110" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="354" y="110" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+
+            <rect x="214" y="130" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="234" y="130" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="254" y="130" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="274" y="130" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="294" y="130" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="314" y="130" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="334" y="130" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="354" y="130" width="18" height="18" rx="2" fill="#22283a"/>
+
+            <rect x="214" y="150" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="234" y="150" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="254" y="150" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+            <rect x="274" y="150" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="294" y="150" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="314" y="150" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="334" y="150" width="18" height="18" rx="2" fill="#22283a"/>
+            <rect x="354" y="150" width="18" height="18" rx="2" fill="#FFB454" opacity="0.9"/>
+          </g>
+
+          <!-- label strip between -->
+          <text x="200" y="108" text-anchor="middle" font-family="JetBrains Mono" font-size="18" fill="#E7714F">≠</text>
+          <text x="200" y="136" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#6b7280">(to a flat net)</text>
+
+          <!-- right side annotation -->
+          <text x="440" y="70" font-family="Inter" font-size="13" fill="#B9BFCC">Numerically almost</text>
+          <text x="440" y="88" font-family="Inter" font-size="13" fill="#B9BFCC">completely different —</text>
+          <text x="440" y="106" font-family="Inter" font-size="13" fill="#B9BFCC">even though a human</text>
+          <text x="440" y="124" font-family="Inter" font-size="13" fill="#B9BFCC">recognises both as X</text>
+          <text x="440" y="150" font-family="Inter" font-size="13" fill="#FFB454">instantly.</text>
+        </svg>
+      </div>
+      <figcaption>FIG 2 — the same X shifted two pixels right looks numerically almost completely different to a flat neural network. CNN filters find the diagonal strokes regardless of where they appear, which is the whole point.</figcaption>
+    </figure>
+
+    <p>The three principles MIT's lecture distills this down to are worth keeping in one place: <strong>(1) apply a filter to extract local features</strong>, <strong>(2) use multiple filters to extract different features</strong>, <strong>(3) spatially share the parameters of each filter</strong>. Everything else in a CNN is an elaboration of those three ideas.</p>
+  </div>
+</section>
+
+<!-- ================= 02. THE CONVOLUTION OPERATION ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">02 · The Core Operation</div>
+    <h2 class="title">What a convolution actually is</h2>
+    <p class="lede">The word sounds intimidating. The operation itself is one of the simplest things in deep learning — element-wise multiply, then add up. That's it.</p>
+
+    <p>A <strong>filter</strong> (also called a kernel) is a small grid of numbers, typically 3×3 or 5×5. You lay it on top of a patch of the image the same size, multiply each filter value by the pixel it's sitting on, and add all those products together. That sum becomes one value in the output — one pixel in what's called the <strong>feature map</strong>. Then the filter slides one step sideways (or by the stride amount), and you do it again. And again. Until the filter has covered the whole image.</p>
+
+    <div class="math-box">
+      For a 3×3 filter \(F\) applied to a patch of image \(X\):
+      \[ \text{output} = \sum_{i=0}^{2} \sum_{j=0}^{2} X_{ij} \cdot F_{ij} \]
+      Element-wise multiply every corresponding pair, then add all 9 results together. That's one value in the feature map.
+    </div>
+
+    <p>Here's the number-level version, pulled directly from the 6.S191 slides. A 5×5 input, a 3×3 filter, and what comes out:</p>
+
+    <figure>
+      <div class="fig-card" style="background:#0B0D12; border:1px solid rgba(255,255,255,0.08);">
+        <svg viewBox="0 0 680 260" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrow2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L6,3 L0,6 Z" fill="#5C7A99"/>
+            </marker>
+          </defs>
+          <!-- 5x5 input grid -->
+          <text x="100" y="18" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#8B92A1">Input (5×5)</text>
+          <!-- Row 0: 1 1 1 0 0 -->
+          <rect x="20" y="24" width="36" height="36" rx="3" fill="#FFB454" opacity="0.85"/><text x="38" y="48" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="500" fill="#1B1F27">1</text>
+          <rect x="58" y="24" width="36" height="36" rx="3" fill="#FFB454" opacity="0.85"/><text x="76" y="48" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="500" fill="#1B1F27">1</text>
+          <rect x="96" y="24" width="36" height="36" rx="3" fill="#FFB454" opacity="0.85"/><text x="114" y="48" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="500" fill="#1B1F27">1</text>
+          <rect x="134" y="24" width="36" height="36" rx="3" fill="#22283a"/><text x="152" y="48" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">0</text>
+          <rect x="172" y="24" width="36" height="36" rx="3" fill="#22283a"/><text x="190" y="48" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">0</text>
+          <!-- Row 1: 0 1 1 1 0 -->
+          <rect x="20" y="62" width="36" height="36" rx="3" fill="#22283a"/><text x="38" y="86" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">0</text>
+          <rect x="58" y="62" width="36" height="36" rx="3" fill="#FFB454" opacity="0.85"/><text x="76" y="86" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="500" fill="#1B1F27">1</text>
+          <rect x="96" y="62" width="36" height="36" rx="3" fill="#FFB454" opacity="0.85"/><text x="114" y="86" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="500" fill="#1B1F27">1</text>
+          <rect x="134" y="62" width="36" height="36" rx="3" fill="#FFB454" opacity="0.85"/><text x="152" y="86" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="500" fill="#1B1F27">1</text>
+          <rect x="172" y="62" width="36" height="36" rx="3" fill="#22283a"/><text x="190" y="86" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">0</text>
+          <!-- Row 2: 0 0 1 1 1 — highlighted patch -->
+          <rect x="20" y="100" width="36" height="36" rx="3" fill="#22283a"/><text x="38" y="124" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">0</text>
+          <rect x="58" y="100" width="36" height="36" rx="3" fill="#FFB454" opacity="0.85"/><text x="76" y="124" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="500" fill="#1B1F27">0</text>
+          <rect x="96" y="100" width="36" height="36" rx="3" fill="#FFB454" opacity="0.85"/><text x="114" y="124" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="500" fill="#1B1F27">1</text>
+          <rect x="134" y="100" width="36" height="36" rx="3" fill="#FFB454" opacity="0.85"/><text x="152" y="124" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="500" fill="#1B1F27">1</text>
+          <rect x="172" y="100" width="36" height="36" rx="3" fill="#22283a"/><text x="190" y="124" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">1</text>
+          <!-- Row 3 -->
+          <rect x="20" y="138" width="36" height="36" rx="3" fill="#22283a"/><text x="38" y="162" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">0</text>
+          <rect x="58" y="138" width="36" height="36" rx="3" fill="#22283a"/><text x="76" y="162" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">0</text>
+          <rect x="96" y="138" width="36" height="36" rx="3" fill="#22283a"/><text x="114" y="162" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">1</text>
+          <rect x="134" y="138" width="36" height="36" rx="3" fill="#22283a"/><text x="152" y="162" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">1</text>
+          <rect x="172" y="138" width="36" height="36" rx="3" fill="#22283a"/><text x="190" y="162" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">0</text>
+          <!-- Row 4 -->
+          <rect x="20" y="176" width="36" height="36" rx="3" fill="#22283a"/><text x="38" y="200" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">0</text>
+          <rect x="58" y="176" width="36" height="36" rx="3" fill="#22283a"/><text x="76" y="200" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">1</text>
+          <rect x="96" y="176" width="36" height="36" rx="3" fill="#22283a"/><text x="114" y="200" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">1</text>
+          <rect x="134" y="176" width="36" height="36" rx="3" fill="#22283a"/><text x="152" y="200" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">0</text>
+          <rect x="172" y="176" width="36" height="36" rx="3" fill="#22283a"/><text x="190" y="200" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">0</text>
+
+          <!-- highlight box on 3x3 patch (top left) -->
+          <rect x="18" y="22" width="114" height="114" rx="4" fill="none" stroke="#FFB454" stroke-width="2.5" stroke-dasharray="5 3"/>
+
+          <!-- ⊗ symbol -->
+          <text x="240" y="128" text-anchor="middle" font-family="Inter" font-size="28" fill="#5C7A99">⊗</text>
+
+          <!-- 3x3 filter -->
+          <text x="320" y="18" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#8B92A1">Filter (3×3)</text>
+          <rect x="272" y="62" width="38" height="38" rx="3" fill="#5C7A99" opacity="0.7"/><text x="291" y="87" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="500" fill="#fff">1</text>
+          <rect x="312" y="62" width="38" height="38" rx="3" fill="#33425a"/><text x="331" y="87" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">0</text>
+          <rect x="352" y="62" width="38" height="38" rx="3" fill="#5C7A99" opacity="0.7"/><text x="371" y="87" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="500" fill="#fff">1</text>
+          <rect x="272" y="102" width="38" height="38" rx="3" fill="#33425a"/><text x="291" y="127" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">0</text>
+          <rect x="312" y="102" width="38" height="38" rx="3" fill="#5C7A99" opacity="0.7"/><text x="331" y="127" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="500" fill="#fff">1</text>
+          <rect x="352" y="102" width="38" height="38" rx="3" fill="#33425a"/><text x="371" y="127" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">0</text>
+          <rect x="272" y="142" width="38" height="38" rx="3" fill="#5C7A99" opacity="0.7"/><text x="291" y="167" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="500" fill="#fff">1</text>
+          <rect x="312" y="142" width="38" height="38" rx="3" fill="#33425a"/><text x="331" y="167" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#6b7280">0</text>
+          <rect x="352" y="142" width="38" height="38" rx="3" fill="#5C7A99" opacity="0.7"/><text x="371" y="167" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="500" fill="#fff">1</text>
+
+          <!-- = sign -->
+          <text x="420" y="128" text-anchor="middle" font-family="Inter" font-size="28" fill="#5C7A99">=</text>
+
+          <!-- 3x3 feature map output -->
+          <text x="560" y="18" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#8B92A1">Feature Map (3×3)</text>
+          <!-- first cell = 4, highlighted because we just computed it -->
+          <rect x="452" y="62" width="46" height="46" rx="4" fill="#5FAE82" opacity="0.9"/><text x="475" y="91" text-anchor="middle" font-family="JetBrains Mono" font-size="15" font-weight="700" fill="#fff">4</text>
+          <rect x="500" y="62" width="46" height="46" rx="4" fill="#33425a"/><text x="523" y="91" text-anchor="middle" font-family="JetBrains Mono" font-size="15" fill="#5b6880">3</text>
+          <rect x="548" y="62" width="46" height="46" rx="4" fill="#33425a"/><text x="571" y="91" text-anchor="middle" font-family="JetBrains Mono" font-size="15" fill="#5b6880">4</text>
+          <rect x="452" y="110" width="46" height="46" rx="4" fill="#33425a"/><text x="475" y="139" text-anchor="middle" font-family="JetBrains Mono" font-size="15" fill="#5b6880">2</text>
+          <rect x="500" y="110" width="46" height="46" rx="4" fill="#33425a"/><text x="523" y="139" text-anchor="middle" font-family="JetBrains Mono" font-size="15" fill="#5b6880">4</text>
+          <rect x="548" y="110" width="46" height="46" rx="4" fill="#33425a"/><text x="571" y="139" text-anchor="middle" font-family="JetBrains Mono" font-size="15" fill="#5b6880">3</text>
+          <rect x="452" y="158" width="46" height="46" rx="4" fill="#33425a"/><text x="475" y="187" text-anchor="middle" font-family="JetBrains Mono" font-size="15" fill="#5b6880">2</text>
+          <rect x="500" y="158" width="46" height="46" rx="4" fill="#33425a"/><text x="523" y="187" text-anchor="middle" font-family="JetBrains Mono" font-size="15" fill="#5b6880">3</text>
+          <rect x="548" y="158" width="46" height="46" rx="4" fill="#33425a"/><text x="571" y="187" text-anchor="middle" font-family="JetBrains Mono" font-size="15" fill="#5b6880">4</text>
+
+          <!-- callout: how 4 was computed -->
+          <text x="340" y="230" text-anchor="middle" font-family="JetBrains Mono" font-size="10.5" fill="#6b7280">patch: (1×1)+(1×0)+(1×1) + (0×0)+(1×1)+(1×0) + (0×1)+(0×0)+(1×1) = 1+1+1+1 = 4</text>
+        </svg>
+      </div>
+      <figcaption>FIG 3 — the 3×3 filter slides over the 5×5 input. At the top-left position (highlighted), element-wise multiply and sum gives 4. Slide one step and repeat for every position. These are the exact numbers from the MIT 6.S191 lecture.</figcaption>
+    </figure>
+
+    <h3 class="sub-title">Three parameters that control everything</h3>
+    <p><strong>Stride</strong> is how many pixels the filter moves each step. Stride 1 means dense overlap — the filter shifts by one pixel at a time, producing a large output. Stride 2 halves the output dimensions. It's the difference between "I want to look at everything closely" and "I'm willing to skip some overlap to save compute."</p>
+
+    <p><strong>Padding</strong> decides what happens at the edges. Without padding, a 3×3 filter applied to a 5×5 image can only be placed where a full 3×3 patch fits — meaning the output shrinks to 3×3. Add a border of zeros around the input ("same" padding) and the output stays 5×5. Most modern implementations use same padding so spatial dimensions don't quietly shrink at every layer.</p>
+
+    <p>The output size formula, straight from CS231n:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ \text{output size} = \left\lfloor \frac{W - F + 2P}{S} \right\rfloor + 1 \]
+      where \(W\) = input width, \(F\) = filter size, \(P\) = padding, \(S\) = stride.
+    </div>
+
+    <p>Quick check: 7×7 input, 3×3 filter, stride 1, padding 0 → (7 − 3 + 0)/1 + 1 = 5. Matches what you'd expect — the filter has five positions horizontally and five vertically. With padding 1: (7 − 3 + 2)/1 + 1 = 7. Same size in, same size out.</p>
+
+    <div class="def">
+      <span class="term">Parameter sharing — the real efficiency win</span>
+      One filter has, say, 3×3 = 9 weights (for a grayscale image). Those <em>same</em> 9 weights are used at every position in the image. This is called parameter sharing, and it's what makes CNNs affordable. As CS231n puts it: if detecting a horizontal edge is useful at one location, it's probably useful everywhere else too. No need to relearn it for each of the 55×55 positions in a feature map — one filter, learned once, applied everywhere.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 03. WHAT FILTERS ACTUALLY LEARN ================= -->
+<section class="paper-dim">
+  <div class="wrap-wide">
+    <div class="kicker">03 · What the Filters Actually Learn</div>
+    <h2 class="title">You don't design the filters. The network does.</h2>
+    <p class="lede">Here's the part that surprises people: you don't write a filter that detects edges, or one that detects fur, or one that detects wheels. You initialize them randomly, run backpropagation, and they learn to detect things on their own.</p>
+
+    <p>The MIT lecture makes this vivid with an example that's worth working through explicitly. Consider a filter designed to detect the top-left diagonal of an X. It might look like this — a 3×3 grid of 1s and -1s, with 1s where the diagonal stroke should be and -1s everywhere else. When this filter slides over a region of the image that actually contains that diagonal, the dot product produces a high positive value. When it slides over background, the 1s land on -1 pixels and the -1s land on 1 pixels, and everything cancels out to something near zero. High activation means "pattern found here." Low activation means "pattern not here."</p>
+
+    <figure>
+      <div class="fig-card light">
+        <svg viewBox="0 0 680 200" xmlns="http://www.w3.org/2000/svg">
+          <!-- Three example filters -->
+          <text x="80" y="18" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#6b7280">filter: top-left diagonal</text>
+          <!-- Filter 1: diagonal / -->
+          <rect x="20" y="24" width="36" height="36" rx="3" fill="#FFB454" opacity="0.9"/><text x="38" y="48" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="600" fill="#1B1F27">1</text>
+          <rect x="58" y="24" width="36" height="36" rx="3" fill="#E3DECE"/><text x="76" y="48" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#8B92A1">-1</text>
+          <rect x="96" y="24" width="36" height="36" rx="3" fill="#E3DECE"/><text x="114" y="48" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#8B92A1">-1</text>
+          <rect x="20" y="62" width="36" height="36" rx="3" fill="#E3DECE"/><text x="38" y="86" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#8B92A1">-1</text>
+          <rect x="58" y="62" width="36" height="36" rx="3" fill="#FFB454" opacity="0.9"/><text x="76" y="86" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="600" fill="#1B1F27">1</text>
+          <rect x="96" y="62" width="36" height="36" rx="3" fill="#E3DECE"/><text x="114" y="86" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#8B92A1">-1</text>
+          <rect x="20" y="100" width="36" height="36" rx="3" fill="#E3DECE"/><text x="38" y="124" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#8B92A1">-1</text>
+          <rect x="58" y="100" width="36" height="36" rx="3" fill="#E3DECE"/><text x="76" y="124" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#8B92A1">-1</text>
+          <rect x="96" y="100" width="36" height="36" rx="3" fill="#FFB454" opacity="0.9"/><text x="114" y="124" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="600" fill="#1B1F27">1</text>
+          <text x="80" y="158" text-anchor="middle" font-family="Inter" font-size="12" fill="#6b7280">↑ detects "\" stroke</text>
+
+          <!-- Filter 2: cross / center -->
+          <text x="280" y="18" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#6b7280">filter: center cross</text>
+          <rect x="220" y="24" width="36" height="36" rx="3" fill="#E3DECE"/><text x="238" y="48" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#8B92A1">-1</text>
+          <rect x="258" y="24" width="36" height="36" rx="3" fill="#5C7A99" opacity="0.8"/><text x="276" y="48" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="600" fill="#fff">1</text>
+          <rect x="296" y="24" width="36" height="36" rx="3" fill="#E3DECE"/><text x="314" y="48" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#8B92A1">-1</text>
+          <rect x="220" y="62" width="36" height="36" rx="3" fill="#5C7A99" opacity="0.8"/><text x="238" y="86" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="600" fill="#fff">1</text>
+          <rect x="258" y="62" width="36" height="36" rx="3" fill="#5C7A99" opacity="0.8"/><text x="276" y="86" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="600" fill="#fff">1</text>
+          <rect x="296" y="62" width="36" height="36" rx="3" fill="#5C7A99" opacity="0.8"/><text x="314" y="86" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="600" fill="#fff">1</text>
+          <rect x="220" y="100" width="36" height="36" rx="3" fill="#E3DECE"/><text x="238" y="124" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#8B92A1">-1</text>
+          <rect x="258" y="100" width="36" height="36" rx="3" fill="#5C7A99" opacity="0.8"/><text x="276" y="124" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="600" fill="#fff">1</text>
+          <rect x="296" y="100" width="36" height="36" rx="3" fill="#E3DECE"/><text x="314" y="124" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#8B92A1">-1</text>
+          <text x="280" y="158" text-anchor="middle" font-family="Inter" font-size="12" fill="#6b7280">↑ detects cross / intersection</text>
+
+          <!-- Filter 3: edge detect vertical -->
+          <text x="480" y="18" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#6b7280">filter: edge detect</text>
+          <rect x="420" y="24" width="36" height="36" rx="3" fill="#E3DECE"/><text x="438" y="48" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#8B92A1">0</text>
+          <rect x="458" y="24" width="36" height="36" rx="3" fill="#5C7A99" opacity="0.8"/><text x="476" y="48" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="600" fill="#fff">1</text>
+          <rect x="496" y="24" width="36" height="36" rx="3" fill="#E3DECE"/><text x="514" y="48" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#8B92A1">0</text>
+          <rect x="420" y="62" width="36" height="36" rx="3" fill="#5C7A99" opacity="0.8"/><text x="438" y="86" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="600" fill="#fff">1</text>
+          <rect x="458" y="62" width="36" height="36" rx="3" fill="#E3DECE"/><text x="476" y="86" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#8B92A1">-4</text>
+          <rect x="496" y="62" width="36" height="36" rx="3" fill="#5C7A99" opacity="0.8"/><text x="514" y="86" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="600" fill="#fff">1</text>
+          <rect x="420" y="100" width="36" height="36" rx="3" fill="#E3DECE"/><text x="438" y="124" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#8B92A1">0</text>
+          <rect x="458" y="100" width="36" height="36" rx="3" fill="#5C7A99" opacity="0.8"/><text x="476" y="124" text-anchor="middle" font-family="JetBrains Mono" font-size="13" font-weight="600" fill="#fff">1</text>
+          <rect x="496" y="100" width="36" height="36" rx="3" fill="#E3DECE"/><text x="514" y="124" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#8B92A1">0</text>
+          <text x="480" y="158" text-anchor="middle" font-family="Inter" font-size="12" fill="#6b7280">↑ same as MIT's "Edge Detect" filter</text>
+
+          <!-- explanation note -->
+          <text x="340" y="185" text-anchor="middle" font-family="Inter" font-size="13" fill="#6b7280">These were hand-illustrated for explanation. Real learned filters look messier but do the same job.</text>
+        </svg>
+      </div>
+      <figcaption>FIG 4 — three filter patterns. The first detects a "\" diagonal stroke. The second lights up at intersections. The third is the Laplacian edge detector MIT uses in the lecture — the same 0/1/−4 structure that produces the crisp edge maps you see in image processing.</figcaption>
+    </figure>
+
+    <p>The Lenna image from the lecture makes this visceral. Feed the original photo through an edge-detection filter and you get an image where the bright areas are exactly where sharp edges are — the outline of the hat, the curve of the shoulder, the border between light and shadow. A filter with just nine values in it, applied everywhere, extracts an entire structural sketch of the image. And crucially: <strong>a CNN doesn't hardcode these filters</strong>. It starts with random values and learns through gradient descent which filters minimize the loss. Some of AlexNet's 96 learned 11×11 filters look like edge detectors. Some look like blob detectors. Some detect colour gradients. They all emerged from random initialization and lots of gradient updates.</p>
+
+    <div class="aside">
+      <span class="term">What CS231n says about the filters AlexNet learned</span>
+      The 96 learned filters from Krizhevsky et al. (AlexNet, 2012) are each size 11×11×3 and are shared by the 55×55 neurons in one depth slice. The pattern makes intuitive sense: if detecting a horizontal edge is useful at one location, it should be useful at all other locations too — so there's no reason to relearn it 55×55 times. One filter, learned once, applied everywhere. That's parameter sharing in action.
+    </div>
+
+    <h3 class="sub-title">Multiple filters, multiple feature maps</h3>
+    <p>You don't apply just one filter. You apply, say, 32 of them. Each one learns to detect something different. Each one produces its own feature map — a spatial map of "where in the image was this particular pattern present, and how strongly?" Stack those 32 feature maps and the output of a convolutional layer has shape <span class="mono">H × W × 32</span>. This is what CS231n calls the output volume — 3D, not 2D. Width and height track spatial location. Depth (number of filters) tracks which feature we're talking about.</p>
+
+    <p>A single neuron in the first conv layer is only connected to a small 3×3 patch of the input. But a neuron in a later conv layer is connected to a region that maps back to a much larger area of the original image — its <strong>receptive field</strong> grows with each layer. Early layers look at tiny patches. Late layers, through the stacking, effectively "see" large regions of the original image.</p>
+  </div>
+</section>
+
+<!-- ================= 04. RELU ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">04 · Introducing Non-Linearity</div>
+    <h2 class="title">ReLU — applying it after every convolution, always</h2>
+    <p class="lede">Convolution is a linear operation. Stack two linear operations and you get one linear operation — all that depth buys you nothing. ReLU is what breaks the linearity and lets the network learn anything complicated.</p>
+
+    <p>The operation itself is the definition of simple: \(\text{ReLU}(z) = \max(0, z)\). Every negative value in the feature map becomes zero. Every positive value stays exactly as it is. That's it. No curve, no exponential. Applied pixel-by-pixel across the entire feature map.</p>
+
+    <p>The MIT lecture shows this visually with a building photograph. Before ReLU: a grainy feature map where black pixels represent negative activations and white represents positive. After ReLU: the same map, but all the black is gone — only the positive activations remain. The structure you care about (edges, textures) was already mostly in the positive values. The negative values were suppressing nothing important, and removing them keeps the signal clean.</p>
+
+    <div class="def">
+      <span class="term">Why not sigmoid?</span>
+      We went through this in the neural networks post. Sigmoid saturates — for large positive or negative inputs, its derivative is nearly zero. Chain a dozen of those derivatives together through backprop and the gradient reaching the early layers is essentially nothing, so those layers stop learning. ReLU's derivative is either 0 (for negative inputs) or a flat, constant 1 (for positive ones). A gradient passing through an active ReLU neuron comes out the other side exactly as strong as it went in. That's the whole reason deep networks became trainable.
+    </div>
+
+    <figure>
+      <div class="fig-card" style="background:#0B0D12; border:1px solid rgba(255,255,255,0.08);">
+        <svg viewBox="0 0 620 170" xmlns="http://www.w3.org/2000/svg">
+          <!-- Left: feature map before ReLU (dark/light mix) -->
+          <text x="90" y="18" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#8B92A1">Feature map (before ReLU)</text>
+          <rect x="10" y="24" width="160" height="130" rx="6" fill="#11141B" stroke="#33425a"/>
+          <!-- mix of dark (negative) and light (positive) cells, 4x4 -->
+          <rect x="18" y="32" width="34" height="34" rx="3" fill="#22283a"/><text x="35" y="55" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5b6880">-3</text>
+          <rect x="54" y="32" width="34" height="34" rx="3" fill="#FFB454" opacity="0.8"/><text x="71" y="55" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#1B1F27">+7</text>
+          <rect x="90" y="32" width="34" height="34" rx="3" fill="#22283a"/><text x="107" y="55" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5b6880">-1</text>
+          <rect x="126" y="32" width="34" height="34" rx="3" fill="#FFB454" opacity="0.6"/><text x="143" y="55" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#1B1F27">+4</text>
+          <rect x="18" y="68" width="34" height="34" rx="3" fill="#FFB454" opacity="0.5"/><text x="35" y="91" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#1B1F27">+2</text>
+          <rect x="54" y="68" width="34" height="34" rx="3" fill="#22283a"/><text x="71" y="91" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5b6880">-5</text>
+          <rect x="90" y="68" width="34" height="34" rx="3" fill="#FFB454" opacity="0.9"/><text x="107" y="91" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#1B1F27">+9</text>
+          <rect x="126" y="68" width="34" height="34" rx="3" fill="#22283a"/><text x="143" y="91" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5b6880">-2</text>
+          <rect x="18" y="104" width="34" height="34" rx="3" fill="#22283a"/><text x="35" y="127" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5b6880">-8</text>
+          <rect x="54" y="104" width="34" height="34" rx="3" fill="#FFB454" opacity="0.4"/><text x="71" y="127" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#1B1F27">+1</text>
+          <rect x="90" y="104" width="34" height="34" rx="3" fill="#22283a"/><text x="107" y="127" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5b6880">-4</text>
+          <rect x="126" y="104" width="34" height="34" rx="3" fill="#FFB454" opacity="0.7"/><text x="143" y="127" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#1B1F27">+6</text>
+
+          <!-- Arrow with ReLU label -->
+          <text x="228" y="78" text-anchor="middle" font-family="JetBrains Mono" font-size="22" fill="#5C7A99">→</text>
+          <text x="228" y="96" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#FFB454">ReLU</text>
+          <text x="228" y="112" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#6b7280">max(0, z)</text>
+
+          <!-- Right: feature map after ReLU (zeros replace negatives) -->
+          <text x="450" y="18" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#8B92A1">Feature map (after ReLU)</text>
+          <rect x="280" y="24" width="160" height="130" rx="6" fill="#11141B" stroke="#33425a"/>
+          <rect x="288" y="32" width="34" height="34" rx="3" fill="#11141B" stroke="#22283a"/><text x="305" y="55" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#33425a">0</text>
+          <rect x="324" y="32" width="34" height="34" rx="3" fill="#FFB454" opacity="0.8"/><text x="341" y="55" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#1B1F27">7</text>
+          <rect x="360" y="32" width="34" height="34" rx="3" fill="#11141B" stroke="#22283a"/><text x="377" y="55" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#33425a">0</text>
+          <rect x="396" y="32" width="34" height="34" rx="3" fill="#FFB454" opacity="0.6"/><text x="413" y="55" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#1B1F27">4</text>
+          <rect x="288" y="68" width="34" height="34" rx="3" fill="#FFB454" opacity="0.5"/><text x="305" y="91" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#1B1F27">2</text>
+          <rect x="324" y="68" width="34" height="34" rx="3" fill="#11141B" stroke="#22283a"/><text x="341" y="91" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#33425a">0</text>
+          <rect x="360" y="68" width="34" height="34" rx="3" fill="#FFB454" opacity="0.9"/><text x="377" y="91" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#1B1F27">9</text>
+          <rect x="396" y="68" width="34" height="34" rx="3" fill="#11141B" stroke="#22283a"/><text x="413" y="91" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#33425a">0</text>
+          <rect x="288" y="104" width="34" height="34" rx="3" fill="#11141B" stroke="#22283a"/><text x="305" y="127" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#33425a">0</text>
+          <rect x="324" y="104" width="34" height="34" rx="3" fill="#FFB454" opacity="0.4"/><text x="341" y="127" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#1B1F27">1</text>
+          <rect x="360" y="104" width="34" height="34" rx="3" fill="#11141B" stroke="#22283a"/><text x="377" y="127" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#33425a">0</text>
+          <rect x="396" y="104" width="34" height="34" rx="3" fill="#FFB454" opacity="0.7"/><text x="413" y="127" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#1B1F27">6</text>
+
+          <!-- note right -->
+          <text x="490" y="78" font-family="Inter" font-size="12" fill="#8B92A1">Negatives</text>
+          <text x="490" y="95" font-family="Inter" font-size="12" fill="#8B92A1">→ zero.</text>
+          <text x="490" y="116" font-family="Inter" font-size="12" fill="#8B92A1">Positives</text>
+          <text x="490" y="133" font-family="Inter" font-size="12" fill="#8B92A1">unchanged.</text>
+        </svg>
+      </div>
+      <figcaption>FIG 5 — ReLU in action on a feature map. Negative activations (where the filter didn't find what it was looking for) get zeroed out. Positive activations (matches) pass through untouched. The output shape doesn't change — same H×W×depth, just with the negatives removed.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ================= 05. POOLING ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">05 · Throwing Away the Right Information</div>
+    <h2 class="title">Pooling — compress without losing what matters</h2>
+    <p class="lede">After convolution and ReLU, the feature maps are still large. Pooling shrinks them. The specific choice of which value to keep — the maximum — is what makes this smarter than just throwing pixels away.</p>
+
+    <p>Max pooling divides the feature map into non-overlapping 2×2 windows and keeps the highest value from each. The exact numbers from MIT's lecture: input is 1,1,2,4 / 5,6,7,8 / 3,2,1,0 / 1,2,3,4. After 2×2 max pool with stride 2, output is 6,8 / 3,4. Four values collapse to one, and the maximum — the strongest detection signal — survives.</p>
+
+    <figure>
+      <div class="fig-card light">
+        <svg viewBox="0 0 580 190" xmlns="http://www.w3.org/2000/svg">
+          <defs><marker id="arrowP" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L6,3 L0,6 Z" fill="#6b7280"/></marker></defs>
+          <!-- 4x4 input -->
+          <text x="145" y="16" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#6b7280">input (4×4)</text>
+          <rect x="20" y="22" width="56" height="56" rx="4" fill="#E8F3E8" stroke="#bbb"/><text x="48" y="57" text-anchor="middle" font-family="JetBrains Mono" font-size="16" fill="#4a6044">1</text>
+          <rect x="78" y="22" width="56" height="56" rx="4" fill="#E8F3E8" stroke="#bbb"/><text x="106" y="57" text-anchor="middle" font-family="JetBrains Mono" font-size="16" fill="#4a6044">1</text>
+          <rect x="136" y="22" width="56" height="56" rx="4" fill="#D6E8F5" stroke="#bbb"/><text x="164" y="57" text-anchor="middle" font-family="JetBrains Mono" font-size="16" fill="#2c547a">2</text>
+          <rect x="194" y="22" width="56" height="56" rx="4" fill="#D6E8F5" stroke="#bbb"/><text x="222" y="57" text-anchor="middle" font-family="JetBrains Mono" font-size="16" fill="#2c547a">4</text>
+          <rect x="20" y="80" width="56" height="56" rx="4" fill="#E8F3E8" stroke="#bbb"/><text x="48" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="16" fill="#4a6044">5</text>
+          <rect x="78" y="80" width="56" height="56" rx="4" fill="#5FAE82" stroke="#3d8c60"/><text x="106" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="16" font-weight="700" fill="#fff">6</text>
+          <rect x="136" y="80" width="56" height="56" rx="4" fill="#D6E8F5" stroke="#bbb"/><text x="164" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="16" fill="#2c547a">7</text>
+          <rect x="194" y="80" width="56" height="56" rx="4" fill="#5C7A99" stroke="#4a6688"/><text x="222" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="16" font-weight="700" fill="#fff">8</text>
+          <rect x="20" y="138" width="56" height="46" rx="4" fill="#F5EAD6" stroke="#bbb"/><text x="48" y="168" text-anchor="middle" font-family="JetBrains Mono" font-size="16" fill="#7a5c2c">3</text>
+          <rect x="78" y="138" width="56" height="46" rx="4" fill="#F5EAD6" stroke="#bbb"/><text x="106" y="168" text-anchor="middle" font-family="JetBrains Mono" font-size="16" fill="#7a5c2c">2</text>
+          <rect x="136" y="138" width="56" height="46" rx="4" fill="#EDD6E8" stroke="#bbb"/><text x="164" y="168" text-anchor="middle" font-family="JetBrains Mono" font-size="16" fill="#6a2c6a">1</text>
+          <rect x="194" y="138" width="56" height="46" rx="4" fill="#EDD6E8" stroke="#bbb"/><text x="222" y="168" text-anchor="middle" font-family="JetBrains Mono" font-size="16" fill="#6a2c6a">0</text>
+          <!-- Quadrant borders -->
+          <rect x="18" y="20" width="118" height="118" rx="3" fill="none" stroke="#5FAE82" stroke-width="2.5"/>
+          <rect x="134" y="20" width="118" height="118" rx="3" fill="none" stroke="#5C7A99" stroke-width="2.5"/>
+          <rect x="18" y="136" width="118" height="50" rx="3" fill="none" stroke="#FFB454" stroke-width="2.5"/>
+          <rect x="134" y="136" width="118" height="50" rx="3" fill="none" stroke="#E7714F" stroke-width="2.5"/>
+          <!-- Arrow -->
+          <text x="295" y="92" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#6b7280">max pool 2×2</text>
+          <text x="295" y="108" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#6b7280">stride 2</text>
+          <line x1="260" y1="100" x2="318" y2="100" stroke="#6b7280" stroke-width="1.2" marker-end="url(#arrowP)"/>
+          <!-- 2×2 output -->
+          <rect x="328" y="52" width="70" height="70" rx="5" fill="#5FAE82" opacity="0.9"/><text x="363" y="93" text-anchor="middle" font-family="JetBrains Mono" font-size="22" font-weight="700" fill="#fff">6</text>
+          <rect x="402" y="52" width="70" height="70" rx="5" fill="#5C7A99" opacity="0.9"/><text x="437" y="93" text-anchor="middle" font-family="JetBrains Mono" font-size="22" font-weight="700" fill="#fff">8</text>
+          <rect x="328" y="126" width="70" height="54" rx="5" fill="#FFB454" opacity="0.9"/><text x="363" y="160" text-anchor="middle" font-family="JetBrains Mono" font-size="22" font-weight="700" fill="#1B1F27">3</text>
+          <rect x="402" y="126" width="70" height="54" rx="5" fill="#E7714F" opacity="0.9"/><text x="437" y="160" text-anchor="middle" font-family="JetBrains Mono" font-size="22" font-weight="700" fill="#fff">4</text>
+          <text x="363" y="16" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#6b7280">output (2×2)</text>
+          <!-- labels -->
+          <text x="490" y="85" font-family="Inter" font-size="12" fill="#6b7280">4×4 → 2×2</text>
+          <text x="490" y="103" font-family="Inter" font-size="12" fill="#6b7280">Depth unchanged.</text>
+          <text x="490" y="121" font-family="Inter" font-size="12" fill="#6b7280">Max = strongest</text>
+          <text x="490" y="139" font-family="Inter" font-size="12" fill="#6b7280">detection signal.</text>
+        </svg>
+      </div>
+      <figcaption>FIG 6 — max pooling from MIT 6.S191. Each colour-coded 2×2 quadrant keeps only its largest value. The window with 1,1,5,6 keeps 6. The window with 2,4,7,8 keeps 8. Spatial size halves. Depth stays the same.</figcaption>
+    </figure>
+
+    <p>Why max, specifically? The maximum activation in a region is evidence that a feature was detected <em>somewhere</em> in that region. You don't always care exactly where — a nose slightly left or right of center doesn't change the fact that it's a face. By keeping the maximum, you retain "yes, this feature was found here" while discarding the precise pixel-level address. That's <strong>translation invariance</strong>. Small shifts in the input don't change the output.</p>
+
+    <div class="aside">
+      <span class="term">Getting rid of pooling entirely</span>
+      CS231n notes that "many people dislike the pooling operation." Some modern architectures — particularly those for generative models like VAEs and GANs — drop pooling and use strided convolutions to downsample instead. The trend in vision transformers is also moving away from explicit pooling. But for classification CNNs, max pooling is still the default and shows up in essentially every interview question on the topic.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 06. FULL ARCHITECTURE ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">06 · Putting It All Together</div>
+    <h2 class="title">How the layers stack — and what each stage actually sees</h2>
+    <p class="lede">Each individual layer does something simple. The interesting behaviour emerges from stacking them. CS231n traces this precisely for CIFAR-10 and it's worth following the dimensions all the way through.</p>
+
+    <p>Start with <strong>32×32×3</strong> — width × height × RGB channels. Run through a conv layer with 12 filters of size 3×3, stride 1, same padding: output is <strong>32×32×12</strong>. ReLU leaves shape unchanged. Pooling (2×2, stride 2) halves both spatial dims: <strong>16×16×12</strong>. Stack another conv+relu+pool block: <strong>8×8×24</strong>. Flatten to 8×8×24 = 1,536 values, feed into FC(128) then FC(10) with softmax. Done.</p>
+
+    <div class="math-box">
+      \[ [32 \times 32 \times 3] \xrightarrow{\text{CONV}} [32 \times 32 \times 12] \xrightarrow{\text{POOL}} [16 \times 16 \times 12] \xrightarrow{\text{CONV}} [16 \times 16 \times 24] \xrightarrow{\text{POOL}} [8 \times 8 \times 24] \xrightarrow{\text{Flatten + FC}} [10] \]
+    </div>
+
+    <p>The pattern: spatial size shrinks, depth grows. Late conv layers look at small spatial patches that map back to large regions of the original image — their <strong>receptive field</strong> is large even though the filter itself is still 3×3. Early layers see tiny local patches. Late layers, through stacking, effectively see the whole image.</p>
+
+    <figure>
+      <div class="fig-card" style="background:#0B0D12; border:1px solid rgba(255,255,255,0.08);">
+        <svg viewBox="0 0 660 175" xmlns="http://www.w3.org/2000/svg">
+          <defs><marker id="arrow3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L6,3 L0,6 Z" fill="#5C7A99"/></marker></defs>
+          <rect x="10" y="38" width="130" height="100" rx="8" fill="#181C26" stroke="#33425a"/>
+          <text x="75" y="68" text-anchor="middle" font-family="Space Grotesk" font-size="12" font-weight="600" fill="#FFB454">Early layers</text>
+          <text x="75" y="88" text-anchor="middle" font-family="Inter" font-size="11" fill="#8B92A1">Edges, corners</text>
+          <text x="75" y="104" text-anchor="middle" font-family="Inter" font-size="11" fill="#8B92A1">colour gradients</text>
+          <text x="75" y="120" text-anchor="middle" font-family="Inter" font-size="11" fill="#8B92A1">oriented bars</text>
+          <text x="75" y="158" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#6b7280">Conv 1–2</text>
+          <line x1="140" y1="88" x2="168" y2="88" stroke="#5C7A99" stroke-width="1.5" marker-end="url(#arrow3)"/>
+          <rect x="170" y="24" width="150" height="128" rx="8" fill="#181C26" stroke="#5C7A99"/>
+          <text x="245" y="52" text-anchor="middle" font-family="Space Grotesk" font-size="12" font-weight="600" fill="#5C7A99">Middle layers</text>
+          <text x="245" y="72" text-anchor="middle" font-family="Inter" font-size="11" fill="#8B92A1">Textures, patterns</text>
+          <text x="245" y="88" text-anchor="middle" font-family="Inter" font-size="11" fill="#8B92A1">curves and shapes</text>
+          <text x="245" y="104" text-anchor="middle" font-family="Inter" font-size="11" fill="#8B92A1">object parts emerge</text>
+          <text x="245" y="120" text-anchor="middle" font-family="Inter" font-size="11" fill="#8B92A1">eyes, wheels, leaves</text>
+          <text x="245" y="170" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#6b7280">Conv 3–5</text>
+          <line x1="320" y1="88" x2="348" y2="88" stroke="#5C7A99" stroke-width="1.5" marker-end="url(#arrow3)"/>
+          <rect x="350" y="10" width="148" height="156" rx="8" fill="#181C26" stroke="#FFB454" stroke-width="1.5"/>
+          <text x="424" y="38" text-anchor="middle" font-family="Space Grotesk" font-size="12" font-weight="600" fill="#FFB454">Deep layers</text>
+          <text x="424" y="58" text-anchor="middle" font-family="Inter" font-size="11" fill="#8B92A1">High-level concepts</text>
+          <text x="424" y="74" text-anchor="middle" font-family="Inter" font-size="11" fill="#8B92A1">faces, cars, dogs</text>
+          <text x="424" y="90" text-anchor="middle" font-family="Inter" font-size="11" fill="#8B92A1">scene understanding</text>
+          <text x="424" y="106" text-anchor="middle" font-family="Inter" font-size="11" fill="#8B92A1">large receptive field</text>
+          <text x="424" y="122" text-anchor="middle" font-family="Inter" font-size="11" fill="#8B92A1">very abstract</text>
+          <text x="424" y="174" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#6b7280">Conv 6+</text>
+          <line x1="498" y1="88" x2="526" y2="88" stroke="#5C7A99" stroke-width="1.5" marker-end="url(#arrow3)"/>
+          <rect x="528" y="48" width="122" height="80" rx="8" fill="#181C26" stroke="#5FAE82"/>
+          <text x="589" y="80" text-anchor="middle" font-family="Space Grotesk" font-size="12" font-weight="600" fill="#5FAE82">Output</text>
+          <text x="589" y="98" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#FFB454">"car: 94%"</text>
+          <text x="589" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#6b7280">"truck: 4%"</text>
+        </svg>
+      </div>
+      <figcaption>FIG 7 — the feature hierarchy. Nobody designed these stages — they emerge from training. CS231n's VGG visualization with a Tesla image makes it concrete: first-layer feature maps look like edge detectors; deep feature maps look like car parts.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ================= 07. CODE ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">07 · From Theory To Actually Running Code</div>
+    <h2 class="title">What this looks like when you sit down to build one</h2>
+    <p class="lede">The MIT 6.S191 lecture slides show both Keras and PyTorch APIs side by side. Here's what the standard architecture looks like in Keras, with every argument annotated so you actually understand what you typed.</p>
+
+    <figure>
+      <div class="fig-card" style="background:#0B0D12; border:1px solid rgba(255,255,255,0.08); padding:28px 24px;">
+        <pre style="color:#E7E5DC; font-family:'JetBrains Mono',monospace; font-size:13.5px; line-height:1.8; margin:0; overflow-x:auto;"><span style="color:#6b7280"># Block 1 — 32 filters, each 3×3, learning low-level features</span>
+model.add(Conv2D(<span style="color:#FFB454">32</span>, (<span style="color:#FFB454">3</span>,<span style="color:#FFB454">3</span>), activation=<span style="color:#5FAE82">'relu'</span>, padding=<span style="color:#5FAE82">'same'</span>, input_shape=(<span style="color:#FFB454">64</span>,<span style="color:#FFB454">64</span>,<span style="color:#FFB454">3</span>)))
+<span style="color:#6b7280"># 64×64×3  →  64×64×32  (same padding keeps spatial size)</span>
+model.add(MaxPooling2D(<span style="color:#FFB454">2</span>,<span style="color:#FFB454">2</span>))
+<span style="color:#6b7280"># 64×64×32  →  32×32×32  (halved both dims, depth unchanged)</span>
+
+<span style="color:#6b7280"># Block 2 — 64 filters. More depth as spatial size shrinks.</span>
+model.add(Conv2D(<span style="color:#FFB454">64</span>, (<span style="color:#FFB454">3</span>,<span style="color:#FFB454">3</span>), activation=<span style="color:#5FAE82">'relu'</span>, padding=<span style="color:#5FAE82">'same'</span>))
+<span style="color:#6b7280"># 32×32×32  →  32×32×64</span>
+model.add(MaxPooling2D(<span style="color:#FFB454">2</span>,<span style="color:#FFB454">2</span>))
+<span style="color:#6b7280"># 32×32×64  →  16×16×64</span>
+
+<span style="color:#6b7280"># Block 3 — 128 filters. Deep, abstract features.</span>
+model.add(Conv2D(<span style="color:#FFB454">128</span>, (<span style="color:#FFB454">3</span>,<span style="color:#FFB454">3</span>), activation=<span style="color:#5FAE82">'relu'</span>, padding=<span style="color:#5FAE82">'same'</span>))
+model.add(MaxPooling2D(<span style="color:#FFB454">2</span>,<span style="color:#FFB454">2</span>))
+<span style="color:#6b7280"># 16×16×128  →  8×8×128</span>
+
+<span style="color:#6b7280"># Classifier head</span>
+model.add(Flatten())             <span style="color:#6b7280"># 8×8×128 = 8192 values → 1D vector</span>
+model.add(Dense(<span style="color:#FFB454">128</span>, activation=<span style="color:#5FAE82">'relu'</span>))
+model.add(Dropout(<span style="color:#FFB454">0.5</span>))        <span style="color:#6b7280"># zero 50% of neurons at random each training step</span>
+model.add(Dense(<span style="color:#FFB454">10</span>, activation=<span style="color:#5FAE82">'softmax'</span>))  <span style="color:#6b7280"># 10 class probs summing to 1</span></pre>
+      </div>
+      <figcaption>FIG 8 — Keras CNN with dimension tracking at each step. The filter count doubles (32→64→128) as spatial dims halve — this keeps the total "information volume" roughly constant while letting the network learn increasingly abstract features.</figcaption>
+    </figure>
+
+    <p>Dropout at 0.5 means 50% of FC neurons are randomly zeroed during each training step. This stops the network from memorising specific pathways and forces it to build redundancy. At inference time, dropout switches off. It costs nothing at prediction time and consistently reduces overfitting. Use it.</p>
+
+    <h3 class="sub-title">The training loop underneath all of this</h3>
+    <p>The weights start random. Then, for each batch of images:</p>
+    <ol class="steps">
+      <li><strong>Forward pass</strong> — input flows through every layer to produce a prediction vector.</li>
+      <li><strong>Loss</strong> — compare prediction against ground truth using cross-entropy: \(L = -\sum y_i \log(p_i)\). If the correct class gets probability 0.94, loss is low. If it gets 0.02, loss is high.</li>
+      <li><strong>Backward pass</strong> — gradients of the loss flow back through every layer via the chain rule, telling each filter weight which direction to move to reduce the loss.</li>
+      <li><strong>Update</strong> — Adam optimizer adjusts all weights by a small amount in the direction that reduces loss. Repeat for every batch, every epoch.</li>
+    </ol>
+    <p>After thousands of batches, the filters that started random have settled into edge detectors, texture detectors, shape detectors — whatever the data required. Nobody programmed those features in. They fell out of minimizing the loss.</p>
+  </div>
+</section>
+
+<!-- ================= 08. TRANSFER LEARNING ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">08 · The Practical Thing You'll Actually Use</div>
+    <h2 class="title">Transfer learning — don't train from scratch</h2>
+    <p class="lede">Training a CNN from scratch on a new dataset is almost never the right move for a project. Someone has already trained one on 14 million images and published the weights. Starting there is faster, more accurate, and requires far less data.</p>
+
+    <p>The intuition is grounded in the feature hierarchy. A network trained on ImageNet already knows how to detect edges, textures, and object parts. Those filters don't become useless when you want to classify something new — they're generally useful for any natural image task. So: take the pretrained network, freeze those weights, attach a new classification head for your classes, and only train the head.</p>
+
+    <figure>
+      <div class="fig-card light">
+        <pre style="color:#1B1F27; font-family:'JetBrains Mono',monospace; font-size:13px; line-height:1.8; margin:0; overflow-x:auto;"><span style="color:#6b7280"># EfficientNetB0 pretrained on ImageNet's 14M images</span>
+base = tf.keras.applications.EfficientNetB0(
+    weights=<span style="color:#B5662E">'imagenet'</span>,
+    include_top=<span style="color:#B5662E">False</span>,     <span style="color:#6b7280"># drop ImageNet's 1000-class head</span>
+    input_shape=(<span style="color:#B5662E">224</span>, <span style="color:#B5662E">224</span>, <span style="color:#B5662E">3</span>)
+)
+base.trainable = <span style="color:#B5662E">False</span>      <span style="color:#6b7280"># freeze all pretrained weights</span>
+
+<span style="color:#6b7280"># New head — only these layers get trained</span>
+model = models.Sequential([
+    base,
+    layers.GlobalAveragePooling2D(),  <span style="color:#6b7280"># 7×7×1280 → vector of 1280</span>
+    layers.Dense(<span style="color:#B5662E">128</span>, activation=<span style="color:#B5662E">'relu'</span>),
+    layers.Dense(num_classes, activation=<span style="color:#B5662E">'softmax'</span>)
+])</pre>
+      </div>
+      <figcaption>FIG 9 — transfer learning in ~10 lines. EfficientNet's millions of pretrained parameters stay frozen. Only the two new Dense layers (~130K params) get trained on your data. Works with hundreds of images, not millions.</figcaption>
+    </figure>
+
+    <p><strong>GlobalAveragePooling2D</strong> averages each feature map to a single value. If EfficientNet's last conv block outputs 7×7×1280, GAP collapses it to a 1280-element vector — one number per filter, representing the average presence of that feature across the image. Cleaner than flattening (which would give 7×7×1280 = 62,720 values) and more robust to small spatial shifts.</p>
+
+    <table>
+      <tr><th>Architecture</th><th>Year</th><th>Key contribution</th><th>Params</th></tr>
+      <tr><td>LeNet</td><td>1998</td><td>First working CNN for digit recognition</td><td>~60K</td></tr>
+      <tr><td>AlexNet</td><td>2012</td><td>Deep CNN on GPU, ReLU, dropout — started the era</td><td>60M</td></tr>
+      <tr><td>VGG16</td><td>2014</td><td>Very deep, only 3×3 filters — depth matters</td><td>138M</td></tr>
+      <tr><td>ResNet-50</td><td>2015</td><td>Skip connections — unlocked 50–152 layer networks</td><td>25M</td></tr>
+      <tr><td>EfficientNet</td><td>2019</td><td>Scale width/depth/resolution together optimally</td><td>5–66M</td></tr>
+    </table>
+
+    <p>For interviews: know that AlexNet was the first deep CNN to win ImageNet (2012, 16.4% top-5 error vs 26% for the previous best — a shock result). ResNet introduced skip connections that let gradients bypass layers, solving the vanishing gradient problem for very deep networks. EfficientNet is what you actually use for new projects.</p>
+  </div>
+</section>
+
+<!-- ================= 09. REALITY CHECK ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">09 · A Reality Check Worth Sitting With</div>
+    <h2 class="title">What CNNs actually learn vs. what we say they learn</h2>
+    <p class="lede">The neat story — early layers detect edges, deep layers detect objects — is broadly true. It's also a simplification that breaks in interesting ways.</p>
+
+    <p>CS231n notes that AlexNet's first-layer filters do look like edge detectors and colour blob detectors — the visualizations are striking. But go deeper and the feature maps resist human interpretation. A neuron in layer 4 doesn't respond to "a wheel" — it responds to some activation pattern from the previous layer that happened to be useful for distinguishing cars. We call that pattern "wheel-like" because it's the nearest human concept. The network has no concept of a wheel.</p>
+
+    <p>The clearest demonstration of this gap is adversarial examples. Take an image a network classifies as a cat with 99% confidence. Add a tiny, carefully-constructed pixel perturbation — invisible to a human — and it suddenly outputs "guacamole" with 87% confidence. The learned structure is real enough to classify cats correctly in normal conditions, but it's not the same structure humans use to recognize them. It found a different, more brittle path to the same answer.</p>
+
+    <div class="aside">
+      <span class="term">Why this matters for your projects</span>
+      This is why model interpretability tools like Grad-CAM exist. Grad-CAM highlights which parts of the input image most activated the prediction — giving you a heatmap of "where the network was looking." For a placement project, adding Grad-CAM visualization on top of an EfficientNet classifier transforms it from "a thing that predicts labels" into "a thing that shows its reasoning." That's the difference between a demo and a portfolio piece.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 10. CHEAT SHEET ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">10 · For When You Need The Short Version</div>
+    <h2 class="title">The cheat sheet</h2>
+
+    <table>
+      <tr><th>Layer</th><th>What it does</th><th>Key arguments</th><th>Shape change</th></tr>
+      <tr><td>Conv2D</td><td>Slide filters, compute dot products</td><td>filters, kernel_size, stride, padding</td><td><span class="mono">H×W×C → H'×W'×filters</span></td></tr>
+      <tr><td>ReLU</td><td>Zero out all negative activations</td><td>—</td><td><span class="mono">unchanged</span></td></tr>
+      <tr><td>MaxPool2D</td><td>Keep max value in each window</td><td>pool_size, stride</td><td><span class="mono">H×W×C → H/2×W/2×C</span></td></tr>
+      <tr><td>Flatten</td><td>Unroll 3D volume to 1D vector</td><td>—</td><td><span class="mono">H×W×C → (H·W·C)</span></td></tr>
+      <tr><td>Dense</td><td>Fully-connected classification</td><td>units, activation</td><td><span class="mono">(N) → (units)</span></td></tr>
+      <tr><td>Softmax</td><td>Convert scores to class probs</td><td>—</td><td><span class="mono">sums to 1.0</span></td></tr>
+    </table>
+
+    <h3 class="sub-title">If you forget everything else, keep these</h3>
+    <ul class="clean">
+      <li><strong>Output size formula: (W − F + 2P) / S + 1.</strong> Know this without thinking.</li>
+      <li><strong>Filters double as you go deeper</strong> (32→64→128) while spatial size halves via pooling. Trade spatial resolution for feature richness.</li>
+      <li><strong>Same padding</strong> at every conv so spatial dims only shrink at pooling layers, deliberately.</li>
+      <li><strong>ReLU after every conv</strong>, always. Stacking linear operations without non-linearity collapses to one linear operation.</li>
+      <li><strong>The filters are not designed.</strong> They start random and learn through backprop. The edge-detector story is what they end up looking like, not what they were initialised to be.</li>
+      <li><strong>Transfer learning first.</strong> Pretrained EfficientNetB0 will beat your from-scratch network on almost any dataset under 100K images.</li>
+      <li><strong>Receptive field grows with depth.</strong> A 3×3 filter in layer 5 effectively sees a much larger region of the original image than a 3×3 filter in layer 1.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= FOOTER ================= -->
+<footer>
+  <div class="wrap">
+    <hr class="thin">
+    <p style="color:#C9CDD6; font-size:15.5px; margin-bottom:18px;">
+      Built from three sources, read in this order. <strong>3Blue1Brown — "But what is a Convolution?"</strong> — mathematical intuition for why sliding a filter and summing element-wise products is the right operation for detecting local patterns. <strong>MIT 6.S191 Introduction to Deep Learning, Lecture 3</strong> (Alexander Amini, 2024) — the X-classification motivation, the Lenna edge-detection example, the exact pooling numbers, the three-principle framework. <strong>CS231n: Convolutional Neural Networks for Visual Recognition</strong> (Stanford) — the spatial arrangement formula, parameter sharing explanation, AlexNet's learned filters, dimension tracking, architecture overview. All reorganized and written in my own words so it actually sticks.
+    </p>
+    <p style="color:#8B92A1; font-size:14px;">One suggestion before moving on: implement the convolution operation from scratch in NumPy before touching Keras. <span style="font-family:'JetBrains Mono',monospace; color:var(--amber);">np.sum(patch * filter)</span> at every position. Understanding what that does mechanically is worth more than reading ten explanations of it.</p>
+    <div class="seriesnav" style="margin-top:28px;">
+      <a href="https://www.youtube.com/watch?v=KuXjwB4LzSA" target="_blank">3Blue1Brown — But what is a Convolution?</a>
+      <a href="https://www.youtube.com/watch?v=2xqkSUhmmXU" target="_blank">MIT 6.S191 — CNN Lecture 2024</a>
+      <a href="https://cs231n.github.io/convolutional-networks/" target="_blank">CS231n — Convolutional Networks Notes</a>
+      <a href="https://arxiv.org/abs/1803.01164" target="_blank">AlexNet Paper — Krizhevsky et al.</a>
+      <a href="https://arxiv.org/abs/1512.03385" target="_blank">ResNet Paper — He et al. 2015</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

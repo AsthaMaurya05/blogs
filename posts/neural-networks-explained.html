@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How a Neural Network Actually Learns (Explained Properly)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js"></script>
+<style>
+  :root{
+    --ink:#1B1F27;
+    --paper:#F6F3EC;
+    --paper-dim:#ECE7DA;
+    --dark:#11141B;
+    --dark-2:#181C26;
+    --amber:#FFB454;
+    --amber-soft:#FFD9A0;
+    --wire-cool:#5C7A99;
+    --wire-cool-dim:#33425a;
+    --muted:#8B92A1;
+    --muted-dark:#6b7280;
+    --red:#E7714F;
+    --green:#5FAE82;
+    --rule: rgba(255,255,255,0.08);
+    --rule-dark: rgba(20,20,20,0.10);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    font-size:17px;
+    line-height:1.72;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:600;
+    letter-spacing:-0.01em;
+    margin:0;
+  }
+  .mono{font-family:'JetBrains Mono',monospace;}
+  a{color:inherit;}
+  p{margin:0 0 1.15em 0;}
+  .wrap{max-width:760px; margin:0 auto; padding:0 28px;}
+  .wrap-wide{max-width:920px; margin:0 auto; padding:0 28px;}
+
+  /* ===== HERO ===== */
+  .hero{
+    background:radial-gradient(ellipse 900px 500px at 50% -10%, #1d2433 0%, var(--dark) 60%);
+    color:var(--paper);
+    padding:104px 0 84px;
+    position:relative;
+    overflow:hidden;
+  }
+  .hero .eyebrow{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--amber);
+    margin-bottom:22px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--amber); box-shadow:0 0 8px 2px var(--amber);}
+  .hero h1{
+    font-size:50px;
+    line-height:1.1;
+    color:#F4F1E8;
+    max-width:680px;
+  }
+  .hero h1 em{ font-style:normal; color:var(--amber); }
+  .hero .sub{
+    margin-top:24px;
+    font-size:18.5px;
+    color:#B9BFCC;
+    max-width:560px;
+  }
+  @media (max-width:640px){ .hero{padding:80px 0 60px;} .hero h1{font-size:34px;} }
+
+  section{padding:80px 0;}
+  section.dark{background:var(--dark); color:#E7E5DC;}
+  section.dark h2, section.dark h3{color:#F4F1E8;}
+  section.paper{background:var(--paper);}
+  section.paper-dim{background:var(--paper-dim);}
+  .kicker{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    letter-spacing:0.13em;
+    text-transform:uppercase;
+    color:var(--amber);
+  }
+  section.paper .kicker, section.paper-dim .kicker{ color:#B5662E; }
+  h2.title{font-size:33px; margin-top:10px; margin-bottom:26px;}
+  h3.sub-title{font-size:21px; margin-top:42px; margin-bottom:14px;}
+  .lede{font-size:19px; color:var(--muted-dark); max-width:620px;}
+  section.dark .lede{color:var(--muted);}
+
+  figure{margin:32px 0;}
+  figure svg{width:100%; height:auto; display:block;}
+  figcaption{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+    color:var(--muted-dark);
+    margin-top:12px;
+    padding-top:10px;
+    border-top:1px solid var(--rule-dark);
+  }
+  section.dark figcaption{color:var(--muted); border-top:1px solid var(--rule);}
+  .fig-card{ background:var(--dark); border-radius:14px; padding:30px 26px 18px; }
+  section.dark .fig-card{ background:#0B0D12; border:1px solid var(--rule); }
+  .fig-card.light{ background:#fff; border:1px solid #E3DECE; }
+  .fig-card.light figcaption{color:var(--muted-dark); border-top:1px solid #ECE6D6;}
+
+  .def{
+    border-left:3px solid var(--amber);
+    background:rgba(255,180,84,0.07);
+    padding:16px 20px;
+    border-radius:0 8px 8px 0;
+    margin:24px 0;
+  }
+  .def .term{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+    color:#B5662E; display:block; margin-bottom:6px;
+  }
+  section.dark .def{background:rgba(255,180,84,0.10);}
+  section.dark .def .term{color:var(--amber);}
+
+  .aside{
+    border-left:3px solid var(--wire-cool);
+    background:rgba(92,122,153,0.07);
+    padding:16px 20px;
+    border-radius:0 8px 8px 0;
+    margin:24px 0;
+    font-size:15.5px;
+  }
+  .aside .term{
+    font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:0.08em; text-transform:uppercase;
+    color:#3d5670; display:block; margin-bottom:6px;
+  }
+  section.dark .aside{background:rgba(92,122,153,0.12);}
+  section.dark .aside .term{color:#9db7cf;}
+
+  .math-box{
+    background:#fff; border:1px solid #E3DECE; border-radius:10px;
+    padding:20px 24px; margin:22px 0; overflow-x:auto;
+  }
+  section.dark .math-box{background:#0B0D12; border-color:var(--rule);}
+
+  table{width:100%; border-collapse:collapse; margin:26px 0; font-size:15.5px;}
+  th,td{padding:12px 14px; text-align:left; border-bottom:1px solid var(--rule-dark);}
+  section.dark th, section.dark td{border-bottom:1px solid var(--rule);}
+  th{font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:0.07em; text-transform:uppercase; color:var(--muted-dark);}
+  section.dark th{color:var(--muted);}
+  td .mono{color:var(--amber);}
+  section.paper td .mono, section.paper-dim td .mono{color:#B5662E;}
+  .nudge-table{font-family:'JetBrains Mono',monospace; font-size:13.5px;}
+  .nudge-table td{text-align:center;}
+  .nudge-table th{text-align:center;}
+  .nudge-pos{color:#3d5670;}
+  .nudge-neg{color:#B5662E;}
+
+  .seriesnav{display:flex; flex-wrap:wrap; gap:10px; margin-top:34px;}
+  .seriesnav a{
+    font-family:'JetBrains Mono',monospace; font-size:12.5px; padding:8px 14px;
+    border:1px solid var(--rule); border-radius:999px; text-decoration:none;
+    color:#C9CDD6; transition:border-color .2s, color .2s;
+  }
+  .seriesnav a:hover{border-color:var(--amber); color:var(--amber);}
+
+  footer{ background:var(--dark); color:var(--muted); padding:60px 0 50px; font-size:14.5px; }
+  footer a{color:var(--amber); text-decoration:none; border-bottom:1px solid rgba(255,180,84,0.3);}
+  hr.thin{border:none; border-top:1px solid var(--rule); margin:30px 0;}
+
+  ul.clean{padding-left:0; list-style:none; margin:18px 0;}
+  ul.clean li{padding-left:22px; position:relative; margin-bottom:10px;}
+  ul.clean li::before{
+    content:""; position:absolute; left:0; top:9px;
+    width:7px; height:7px; border-radius:50%;
+    background:var(--amber); box-shadow:0 0 6px 1px rgba(255,180,84,0.6);
+  }
+  ol.steps{padding-left:22px; margin:18px 0;}
+  ol.steps li{margin-bottom:8px;}
+
+  .twocol{display:grid; grid-template-columns:1fr 1fr; gap:22px;}
+  @media (max-width:680px){.twocol{grid-template-columns:1fr;}}
+  .threecol{display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px;}
+  @media (max-width:780px){.threecol{grid-template-columns:1fr;}}
+
+  .pulse{ animation: pulseGlow 2.6s ease-in-out infinite; }
+  @keyframes pulseGlow{ 0%,100%{ opacity:0.55; } 50%{ opacity:1; } }
+  @media (prefers-reduced-motion: reduce){ .pulse{animation:none;} }
+</style>
+</head>
+<body>
+
+<!-- ================= HERO ================= -->
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow"><span class="dot pulse"></span>MY NOTES ON HOW NEURAL NETS LEARN, WRITTEN OUT PROPERLY</div>
+    <h1>Nobody tells the network what an edge looks like. It figures that out by getting yelled at, math-style.</h1>
+    <p class="sub">I went through the 3Blue1Brown neural network series a few times, paused on a lot of frames, and wrote my own notes alongside it. This is that, cleaned up: what a neuron actually is, how a network makes a guess, and — the part that actually took me a few rewatches to get — how it works backward from "you were wrong" to "here's exactly which of the 13,000 numbers to nudge, and by how much."</p>
+
+    <figure style="margin-top:48px;">
+      <div class="fig-card" style="background:#0B0D12; border:1px solid var(--rule);">
+        <svg viewBox="0 0 620 280" xmlns="http://www.w3.org/2000/svg">
+          <g stroke="#3a4456" stroke-width="1" fill="none">
+            <line x1="90" y1="50" x2="270" y2="40"/><line x1="90" y1="50" x2="270" y2="100"/><line x1="90" y1="50" x2="270" y2="160"/><line x1="90" y1="50" x2="270" y2="220"/>
+            <line x1="90" y1="110" x2="270" y2="40"/><line x1="90" y1="110" x2="270" y2="100"/><line x1="90" y1="110" x2="270" y2="160"/><line x1="90" y1="110" x2="270" y2="220"/>
+            <line x1="90" y1="170" x2="270" y2="40"/><line x1="90" y1="170" x2="270" y2="100"/><line x1="90" y1="170" x2="270" y2="160"/><line x1="90" y1="170" x2="270" y2="220"/>
+            <line x1="90" y1="230" x2="270" y2="40"/><line x1="90" y1="230" x2="270" y2="100"/><line x1="90" y1="230" x2="270" y2="160"/><line x1="90" y1="230" x2="270" y2="220"/>
+
+            <line x1="270" y1="40" x2="450" y2="70"/><line x1="270" y1="40" x2="450" y2="130"/><line x1="270" y1="40" x2="450" y2="190"/>
+            <line x1="270" y1="100" x2="450" y2="70"/><line x1="270" y1="100" x2="450" y2="130"/><line x1="270" y1="100" x2="450" y2="190"/>
+            <line x1="270" y1="160" x2="450" y2="70"/><line x1="270" y1="160" x2="450" y2="130"/><line x1="270" y1="160" x2="450" y2="190"/>
+            <line x1="270" y1="220" x2="450" y2="70"/><line x1="270" y1="220" x2="450" y2="130"/><line x1="270" y1="220" x2="450" y2="190"/>
+
+            <line x1="450" y1="70" x2="560" y2="40"/><line x1="450" y1="70" x2="560" y2="100"/><line x1="450" y1="70" x2="560" y2="160"/><line x1="450" y1="70" x2="560" y2="220"/>
+            <line x1="450" y1="130" x2="560" y2="40"/><line x1="450" y1="130" x2="560" y2="100"/><line x1="450" y1="130" x2="560" y2="160"/><line x1="450" y1="130" x2="560" y2="220"/>
+            <line x1="450" y1="190" x2="560" y2="40"/><line x1="450" y1="190" x2="560" y2="100"/><line x1="450" y1="190" x2="560" y2="160"/><line x1="450" y1="190" x2="560" y2="220"/>
+          </g>
+          <g stroke="#8B92A1" stroke-width="1.4" fill="#181C26">
+            <circle cx="90" cy="50" r="11"/><circle cx="90" cy="110" r="11"/><circle cx="90" cy="170" r="11"/><circle cx="90" cy="230" r="11"/>
+            <circle cx="270" cy="40" r="11"/><circle cx="270" cy="100" r="11"/><circle cx="270" cy="160" r="11"/><circle cx="270" cy="220" r="11"/>
+            <circle cx="450" cy="70" r="11"/><circle cx="450" cy="130" r="11"/><circle cx="450" cy="190" r="11"/>
+            <circle cx="560" cy="40" r="11" fill="#FFB454" stroke="#FFB454"/><circle cx="560" cy="100" r="11"/><circle cx="560" cy="160" r="11"/><circle cx="560" cy="220" r="11"/>
+          </g>
+          <g font-family="JetBrains Mono" font-size="12" fill="#B9BFCC" text-anchor="middle">
+            <text x="90" y="260">input layer</text>
+            <text x="270" y="260">hidden layer</text>
+            <text x="450" y="260">hidden layer</text>
+            <text x="560" y="260">output layer</text>
+            <text x="90" y="25">784 neurons</text>
+            <text x="560" y="25" fill="#FFB454">10 neurons</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 0 — the whole shape of the network in one picture: input layer, two hidden layers, output layer. The amber circle is just an example of one "lit up" output neuron — keep this picture in your head for everything below.</figcaption>
+    </figure>
+  </div>
+</header>
+
+<!-- ================= 1. THE NEURON ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">01 · Starting Small</div>
+    <h2 class="title">First, what even is a neuron?</h2>
+    <p class="lede">Strip away the brain metaphor and a neuron is almost boringly simple: it's a box that holds one number, somewhere between 0 and 1.</p>
+
+    <p>That's basically it. People hear "neuron" and picture something biological and mysterious, but in a network it's just a slot for a number. For the very first layer of neurons, that number is just the brightness of one pixel — 0 for pitch black, 1 for white, decimals in between for gray. That's the network's entire "vision."</p>
+
+    <div class="aside">
+      <span class="term">A small caveat, so I'm not lying to you</span>
+      "Between 0 and 1" is only strictly true when the neuron's activation function is sigmoid, which squashes everything into that range on purpose. Later on we'll meet ReLU, which is the more common choice today — and ReLU happily outputs any number 0 or above, with no upper ceiling. So the more accurate version of "what is a neuron" is: a box holding one number, where that number is non-negative, and how tightly it's capped depends on which activation function the layer is using. For the input layer specifically (raw pixel brightness), 0–1 is still exactly right.
+    </div>
+
+    <p>Here's the example everyone uses, and for good reason: take a 28×28 pixel image of a handwritten digit. That's 784 pixels, so the input layer has 784 neurons. The network's job is to look at those 784 brightness values and spit out a guess: which digit is this?</p>
+
+    <div class="def">
+      <span class="term">Activation, in plain words</span>
+      Whatever number is currently sitting inside a neuron. High activation (close to 1) basically means "this neuron is lit up." Low activation (close to 0) means it's quiet. That's the entire vocabulary you need for now.
+    </div>
+
+    <p>Between the input and the final answer, there are hidden layers — in the classic version of this example, two layers of 16 neurons each. Why 16? In this specific toy example, mostly because it fit nicely on a screen — but don't read that as "the number doesn't matter." In real projects, hidden layer size is a genuine hyperparameter, something you choose deliberately and often tune by experiment: too few neurons and the network doesn't have enough room to represent the patterns in your data (underfitting), too many and it has so much spare capacity that it starts memorizing quirks of the training set instead of learning the general pattern, on top of just being slower to train. So "16" was arbitrary here, but "how many neurons should this layer have" is a real, considered decision in practice. What matters conceptually is the idea underneath it: activations in one layer get combined to produce activations in the next, all the way to an output layer of 10 neurons — one per digit, 0 through 9. Whichever of those 10 ends up brightest is the network's answer.</p>
+  </div>
+</section>
+
+<!-- ================= 2. WHY LAYERS ================= -->
+<section class="dark">
+  <div class="wrap-wide">
+    <div class="kicker">02 · The Hope, Before The Reality</div>
+    <h2 class="title">Why bother with layers at all?</h2>
+    <p class="lede">Because that's roughly how you and I actually read handwriting — by noticing small pieces and stacking them up into a bigger idea.</p>
+
+    <p>Think about how you tell an 8 from a 9. You're not comparing pixel-by-pixel against some mental template. You're noticing: there's a loop up top, and another loop below it — that's an 8. One loop and a line trailing off to the side — probably a 9. You're unconsciously breaking the digit into smaller, reusable pieces: loops, lines, curves.</p>
+
+    <p>The hope behind a layered network is that it might learn to do something similar, automatically:</p>
+    <ul class="clean">
+      <li>First hidden layer picks up tiny <strong>edges</strong> — a bright pixel next to dark ones.</li>
+      <li>Second hidden layer combines edges into <strong>shapes</strong>: loops, long strokes, corners.</li>
+      <li>Output layer combines those shapes into a final decision.</li>
+    </ul>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 880 200" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L8,3 L0,6 Z" fill="#5C7A99"/>
+            </marker>
+          </defs>
+          <g font-family="JetBrains Mono" font-size="12" fill="#E7E5DC" text-anchor="middle">
+            <g><rect x="20" y="55" width="160" height="90" rx="10" fill="#181C26" stroke="#33425a"/><text x="100" y="95" font-size="22">▦</text><text x="100" y="120">pixels</text></g>
+            <line x1="180" y1="100" x2="240" y2="100" stroke="#5C7A99" stroke-width="1.4" marker-end="url(#arrow)"/>
+            <g><rect x="240" y="55" width="160" height="90" rx="10" fill="#181C26" stroke="#33425a"/><text x="320" y="95" font-size="22" fill="#FFB454">⌐⌐</text><text x="320" y="120">edges</text></g>
+            <line x1="400" y1="100" x2="460" y2="100" stroke="#5C7A99" stroke-width="1.4" marker-end="url(#arrow)"/>
+            <g><rect x="460" y="55" width="160" height="90" rx="10" fill="#181C26" stroke="#33425a"/><text x="540" y="95" font-size="22" fill="#FFB454">◯ ╱</text><text x="540" y="120">loops &amp; lines</text></g>
+            <line x1="620" y1="100" x2="680" y2="100" stroke="#5C7A99" stroke-width="1.4" marker-end="url(#arrow)"/>
+            <g><rect x="680" y="55" width="160" height="90" rx="10" fill="#181C26" stroke="#33425a"/><text x="760" y="92" font-size="26" fill="#FFB454">9</text><text x="760" y="122">digit</text></g>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 1 — the hoped-for hierarchy. Worth remembering this picture, because we're going to come back and gently complicate it later.</figcaption>
+    </figure>
+
+    <p>And this isn't just an image-recognition trick. Anything that breaks into layers of abstraction works this way — speech recognition turns raw sound into phonemes, phonemes into words, words into meaning. Same shape, different domain.</p>
+  </div>
+</section>
+
+<!-- ================= 3. WEIGHTS & BIAS ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">03 · The Actual Mechanics</div>
+    <h2 class="title">Okay, but how does one layer actually produce the next?</h2>
+    <p class="lede">Two ingredients do all the work here: weights and biases. Everything fancy that a network does eventually traces back to these two numbers.</p>
+
+    <p><strong>A weight</strong> sits on a connection between two neurons and says how much that connection matters. A big positive weight means "when you're bright, make me brighter too." A negative weight means the opposite — "when you're bright, that's evidence I should be dimmer." <strong>A bias</strong> sits on the receiving neuron and shifts how easily it gets excited — think of it as the neuron's personal threshold for "okay, NOW I'll light up."</p>
+
+    <p>Mechanically, a neuron takes every incoming activation, multiplies each by its weight, adds them all up, then adds the bias. That raw number is usually called \(z\):</p>
+
+    <div class="math-box">
+      \[ z = (w_1 x_1 + w_2 x_2 + \cdots + w_n x_n) + b \]
+    </div>
+
+    <p>\(z\) can be anything — it has no respect for the 0-to-1 rule activations are supposed to follow. So before it's allowed to become the neuron's actual activation, it gets squeezed through a function that forces it into a sane range. More on that function in a second. The whole pipeline, start to finish, looks like this:</p>
+
+    <div class="math-box mono" style="text-align:center; font-size:15px;">
+      input → multiply by weight → add bias → squash with activation function → output
+    </div>
+
+    <h3 class="sub-title">A concrete example: hand-building an edge detector</h3>
+    <p>Say you wanted one specific neuron to fire only when there's an edge in one particular patch of the image — nothing fancy, just "is there a bright strip surrounded by dark pixels here?" You could actually hand-craft this with weights alone: set almost every weight to roughly zero, give small positive weights to the pixels inside that patch, and small negative weights to the ring of pixels surrounding it.</p>
+
+    <figure>
+      <div class="fig-card light">
+        <svg viewBox="0 0 760 260" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="12" fill="#1B1F27">
+            <text x="120" y="20" text-anchor="middle">weight grid</text>
+            <text x="430" y="20" text-anchor="middle">weighted sum</text>
+            <text x="640" y="20" text-anchor="middle">squashed</text>
+          </g>
+          <g transform="translate(40,34)">
+            <rect width="160" height="160" fill="#F6F3EC" stroke="#E3DECE"/>
+            <g stroke="#E3DECE">
+              <line x1="20" y1="0" x2="20" y2="160"/><line x1="40" y1="0" x2="40" y2="160"/>
+              <line x1="60" y1="0" x2="60" y2="160"/><line x1="80" y1="0" x2="80" y2="160"/>
+              <line x1="100" y1="0" x2="100" y2="160"/><line x1="120" y1="0" x2="120" y2="160"/>
+              <line x1="140" y1="0" x2="140" y2="160"/>
+              <line x1="0" y1="20" x2="160" y2="20"/><line x1="0" y1="40" x2="160" y2="40"/>
+              <line x1="0" y1="60" x2="160" y2="60"/><line x1="0" y1="80" x2="160" y2="80"/>
+              <line x1="0" y1="100" x2="160" y2="100"/><line x1="0" y1="120" x2="160" y2="120"/>
+              <line x1="0" y1="140" x2="160" y2="140"/>
+            </g>
+            <g fill="#E7714F" opacity="0.55">
+              <rect x="40" y="40" width="80" height="20"/><rect x="40" y="100" width="80" height="20"/>
+              <rect x="40" y="60" width="20" height="40"/><rect x="100" y="60" width="20" height="40"/>
+            </g>
+            <g fill="#5FAE82"><rect x="60" y="60" width="40" height="40"/></g>
+          </g>
+          <line x1="210" y1="114" x2="280" y2="114" stroke="#8B92A1" stroke-width="1.4" marker-end="url(#arrow2)"/>
+          <defs>
+            <marker id="arrow2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L8,3 L0,6 Z" fill="#8B92A1"/>
+            </marker>
+          </defs>
+          <g transform="translate(280,60)" font-family="JetBrains Mono" font-size="13" fill="#1B1F27">
+            <rect x="0" y="0" width="280" height="110" rx="8" fill="#F6F3EC" stroke="#E3DECE"/>
+            <text x="20" y="35">z = Σ(pixel · weight) + b</text>
+            <text x="20" y="65" fill="#8B92A1" font-size="11.5">only large if the center is</text>
+            <text x="20" y="84" fill="#8B92A1" font-size="11.5">bright AND the ring around</text>
+            <text x="20" y="103" fill="#8B92A1" font-size="11.5">it is dark — a real edge</text>
+          </g>
+          <line x1="560" y1="114" x2="600" y2="114" stroke="#8B92A1" stroke-width="1.4" marker-end="url(#arrow2)"/>
+          <g transform="translate(600,40)">
+            <rect x="0" y="0" width="130" height="140" rx="8" fill="#F6F3EC" stroke="#E3DECE"/>
+            <path d="M 10 110 C 30 110, 40 30, 65 30 S 100 30 120 30" fill="none" stroke="#B5662E" stroke-width="2.5"/>
+            <text x="65" y="135" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#1B1F27">σ(z)</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 2 — green squares are positive weights, red are negative, the neutral grid is roughly zero. This pattern only produces a big weighted sum when the center is lit and the border around it is dark.</figcaption>
+    </figure>
+
+    <p>And the bias? If you only want this neuron to fire once that sum gets past, say, 10 — not just any positive number — you set the bias to −10. So, in short: <strong>weights decide what pattern a neuron is searching for, and bias decides how convinced it needs to be before it actually reacts.</strong></p>
+
+    <h3 class="sub-title">Why this gets out of hand fast</h3>
+    <p>Every neuron in a layer connects to every neuron in the previous layer, and each one of those connections gets its own weight. Just for the jump from the 784-pixel input layer to the first 16-neuron hidden layer, you're already looking at:</p>
+    <div class="math-box" style="text-align:center;">
+      \(784 \times 16 = 12{,}544\) weights, plus 16 biases — and that's only one layer transition.
+    </div>
+    <p>Add up every transition in this small example network and you land at around <strong>13,000 weights and biases total</strong>. "Training the network" is really just a fancy way of saying: find good values for those 13,000 numbers. Nobody sets them by hand — that would be insane. They start out random, and the network slowly tunes them through the process we're building up to.</p>
+  </div>
+</section>
+
+<!-- ================= 4. ACTIVATION FUNCTIONS ================= -->
+<section class="paper-dim">
+  <div class="wrap-wide">
+    <div class="kicker">04 · Squashing The Number Into Something Useful</div>
+    <h2 class="title">Activation functions</h2>
+    <p class="lede">The raw weighted sum \(z\) is unruly — it could be 500, it could be -8000. The activation function's job is to tame it, and along the way, give the network the ability to learn things a straight line never could.</p>
+
+    <div class="threecol">
+      <div class="fig-card light">
+        <svg viewBox="0 0 240 180" xmlns="http://www.w3.org/2000/svg">
+          <line x1="20" y1="150" x2="220" y2="150" stroke="#E3DECE"/>
+          <line x1="120" y1="10" x2="120" y2="160" stroke="#E3DECE"/>
+          <path d="M 20 150 C 60 150, 90 20, 120 80 C 150 140, 180 10, 220 10" fill="none" stroke="#B5662E" stroke-width="2.6"/>
+          <text x="120" y="172" text-anchor="middle" font-family="JetBrains Mono" font-size="12">Sigmoid</text>
+        </svg>
+        <figcaption style="border:none; padding-top:6px;">\(\sigma(z) = \dfrac{1}{1+e^{-z}}\) — squeezes anything into (0, 1).</figcaption>
+      </div>
+      <div class="fig-card light">
+        <svg viewBox="0 0 240 180" xmlns="http://www.w3.org/2000/svg">
+          <line x1="20" y1="150" x2="220" y2="150" stroke="#E3DECE"/>
+          <line x1="120" y1="10" x2="120" y2="160" stroke="#E3DECE"/>
+          <path d="M 20 150 L 120 150 L 220 20" fill="none" stroke="#B5662E" stroke-width="2.6"/>
+          <text x="120" y="172" text-anchor="middle" font-family="JetBrains Mono" font-size="12">ReLU</text>
+        </svg>
+        <figcaption style="border:none; padding-top:6px;">\(\text{ReLU}(z) = \max(0, z)\) — negative becomes zero, positive stays untouched.</figcaption>
+      </div>
+      <div class="fig-card light">
+        <svg viewBox="0 0 240 180" xmlns="http://www.w3.org/2000/svg">
+          <g>
+            <rect x="35" y="100" width="26" height="50" fill="#E3DECE"/>
+            <rect x="75" y="40" width="26" height="110" fill="#B5662E"/>
+            <rect x="115" y="120" width="26" height="30" fill="#E3DECE"/>
+            <rect x="155" y="90" width="26" height="60" fill="#E3DECE"/>
+          </g>
+          <line x1="20" y1="150" x2="220" y2="150" stroke="#8B92A1"/>
+          <text x="120" y="172" text-anchor="middle" font-family="JetBrains Mono" font-size="12">Softmax</text>
+        </svg>
+        <figcaption style="border:none; padding-top:6px;">turns raw scores into probabilities that add up to 1. Tallest bar wins.</figcaption>
+      </div>
+    </div>
+
+    <p>Quick example with ReLU, since it's the easiest to picture: feed it −7, you get 0. Feed it 12, you get 12 back, untouched. That's the entire function. No exponentials, no curves — which is exactly why it's cheap to compute and why it's become the default choice for hidden layers in most modern networks.</p>
+
+    <h3 class="sub-title">Why even bother with a nonlinear function?</h3>
+    <p>This part trips people up, so let me try to make it intuitive. If every layer were just a weighted sum with nothing nonlinear afterward, then stacking ten layers would mathematically collapse into the same thing as one layer. You'd gain nothing from depth — it'd just be one big linear equation wearing a costume. The nonlinearity is what actually lets the network bend its decision-making into curvy, complicated shapes instead of one flat plane.</p>
+
+    <h3 class="sub-title">So why did everyone abandon sigmoid for ReLU?</h3>
+    <p>Short version, stated plainly: <strong>sigmoid was the original activation function; modern networks almost universally use ReLU for hidden layers instead, because it trains faster and sidesteps a specific failure mode called the vanishing gradient problem.</strong> Here's the longer version, since we've already done the calculus to actually understand it.</p>
+
+    <p>Sigmoid was the original choice, partly because it felt biologically poetic, a neuron that's "off," "on," or somewhere gently in between. The problem shows up once a network gets deep, and it's a direct consequence of backpropagation's chain rule, which you'll see worked out in full a bit further down. Every time a gradient signal passes backward through one more layer, it gets multiplied by that layer's activation function derivative, \(\sigma'(z)\). For sigmoid, that derivative tops out at exactly 0.25, its absolute best case, and it's far smaller than that almost everywhere else, since sigmoid goes nearly flat for big positive or negative inputs.</p>
+
+    <div class="def">
+      <span class="term">Vanishing gradient problem</span>
+      Chain a handful of these multiplications together (one per layer, on the way backward through the network) and you're multiplying several numbers that are all 0.25 or smaller. Even with a generous, optimistic 0.25 at every layer, ten layers deep means the gradient reaching the earliest layers has been shrunk by roughly \(0.25^{10} \approx 0.00000095\), essentially nothing. Those early layers stop receiving any meaningful "here's how to improve" signal at all, and effectively stop learning, even while later layers keep training normally.
+    </div>
+
+    <p>ReLU sidesteps this almost by accident. Its derivative is either exactly 0 (for negative inputs) or a clean, constant 1 (for positive ones). No shrinking multiplication, no flattening curve: a gradient passing through an active ReLU neuron comes out the other side exactly as strong as it went in. That one practical difference is a big part of why deep networks, ones with dozens or hundreds of layers, became trainable at all. It's also exactly why the cheat sheet at the end of this post says "hidden layers → ReLU" without much hesitation.</p>
+
+    <table>
+      <tr><th>Function</th><th>Formula</th><th>Range</th><th>Where it's used</th></tr>
+      <tr><td>Sigmoid</td><td class="mono">1 / (1 + e⁻ᶻ)</td><td>(0, 1)</td><td>binary classification output</td></tr>
+      <tr><td>ReLU</td><td class="mono">max(0, z)</td><td>[0, ∞)</td><td>hidden layers, basically everywhere</td></tr>
+      <tr><td>Softmax</td><td class="mono">eᶻⁱ / Σ eᶻʲ</td><td>(0, 1), sums to 1</td><td>multi-class output</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ================= 5. LINEAR ALGEBRA / FORWARD PROP ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">05 · Tidying Up The Notation</div>
+    <h2 class="title">Vectors, matrices, and "forward propagation"</h2>
+    <p class="lede">Writing every single neuron's equation out by hand would be miserable. Linear algebra exists to let us say the same thing far more compactly.</p>
+
+    <p>Stack a layer's activations into a column vector \(\mathbf{a}\). Stack every weight feeding into the next layer into a matrix \(W\) (each row holds one neuron's incoming weights). Stack the biases into a vector \(\mathbf{b}\). Then the jump from one layer to the next, all 16 or all 784 neurons at once, is just:</p>
+
+    <div class="math-box">
+      \[ \mathbf{a}^{(L)} = \sigma\big(W^{(L)} \mathbf{a}^{(L-1)} + \mathbf{b}^{(L)}\big) \]
+    </div>
+    <p>where \(\sigma\) gets applied to every entry separately. It looks denser, but it's the exact same arithmetic as before — just written so a computer (and your own brain) can treat "advance one layer" as a single operation instead of hundreds of tiny ones.</p>
+
+    <p>Running an input through this, layer after layer, until you fall out the other end with a guess, is called <strong>forward propagation</strong>. That's really all the phrase means: push the data forward, get a prediction.</p>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 860 130" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrow3" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L8,3 L0,6 Z" fill="#5C7A99"/>
+            </marker>
+          </defs>
+          <g font-family="JetBrains Mono" font-size="12.5" fill="#E7E5DC" text-anchor="middle">
+            <rect x="10" y="35" width="140" height="60" rx="8" fill="#181C26" stroke="#33425a"/><text x="80" y="70">Input</text>
+            <line x1="150" y1="65" x2="195" y2="65" stroke="#5C7A99" marker-end="url(#arrow3)"/>
+            <rect x="195" y="35" width="140" height="60" rx="8" fill="#181C26" stroke="#33425a"/><text x="265" y="70">× Weights</text>
+            <line x1="335" y1="65" x2="380" y2="65" stroke="#5C7A99" marker-end="url(#arrow3)"/>
+            <rect x="380" y="35" width="140" height="60" rx="8" fill="#181C26" stroke="#33425a"/><text x="450" y="70">+ Bias</text>
+            <line x1="520" y1="65" x2="565" y2="65" stroke="#5C7A99" marker-end="url(#arrow3)"/>
+            <rect x="565" y="35" width="140" height="60" rx="8" fill="#181C26" stroke="#33425a"/><text x="635" y="70">Activation fn</text>
+            <line x1="705" y1="65" x2="750" y2="65" stroke="#5C7A99" marker-end="url(#arrow3)"/>
+            <rect x="750" y="35" width="100" height="60" rx="8" fill="#181C26" stroke="#FFB454"/><text x="800" y="70" fill="#FFB454">Output</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 3 — forward propagation, one layer transition. Run this once per layer and you have a prediction.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ================= 6. COST FUNCTION ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">06 · Putting A Number On "Wrong"</div>
+    <h2 class="title">The loss (cost) function</h2>
+    <p class="lede">A brand-new network has random weights and biases, so naturally its first guesses are garbage. Before you can fix that, you need a precise way to measure exactly how garbage.</p>
+
+    <p>Feed in a picture of a 5. You want the output layer to show activation 1 on the "5" neuron and 0 everywhere else. In reality, especially early on, you'll get some chaotic mess — maybe 0.3 here, 0.6 there, nothing close to the clean answer you wanted. One straightforward way to score that gap, for a single example, adds up the squared distance between each output \(a_j\) and its target \(y_j\):</p>
+
+    <div class="math-box">
+      \[ C_0 = \sum_{j=0}^{9} (a_j - y_j)^2 \]
+    </div>
+
+    <p>Confident and correct → small \(C_0\). Confident and wrong, or just hopelessly unsure → big \(C_0\). Average that across every training example you've got — tens of thousands of them, in the standard MNIST digit dataset — and you get the full cost function:</p>
+
+    <div class="math-box">
+      \[ C(W, \mathbf{b}) = \frac{1}{n}\sum_{i=1}^{n} C_0^{(i)} \]
+    </div>
+
+    <p>Look closely at what this function takes as input. Not an image — the ~13,000 weights and biases. It's a function sitting one level above the network itself, and the entire goal of training boils down to one sentence: <strong>find the weights and biases that make \(C\) as small as it can possibly be.</strong> Everything from here on is just "how do we actually do that."</p>
+
+    <div class="aside">
+      <span class="term">Quick honesty check before we go further</span>
+      The squared-error version above (often called MSE, mean squared error) is the one we'll actually carry through the calculus in the backpropagation section, because it keeps the math clean and easy to follow step by step. In real, modern classification networks, though, you'll almost always see <strong>cross-entropy</strong> used instead — it's covered just below. The two play the same role (measuring "how wrong") and the backpropagation logic works the same way for both; only the exact derivative formulas at the very last step change. I'm using squared error here purely as a teaching tool, the same way 3Blue1Brown does in the original videos.
+    </div>
+
+    <p>One small but useful side-note: squared error works fine, but in practice people often reach for <strong>cross-entropy</strong> instead for classification problems, especially once softmax is involved:</p>
+    <div class="math-box">
+      \[ C_0 = -\sum_{j} y_j \log(a_j) \]
+    </div>
+    <p>It punishes a confident wrong answer harder than squared error does, which in practice tends to speed learning up. Rule of thumb: sigmoid + binary classification pairs with binary cross-entropy; softmax + multi-class pairs with categorical cross-entropy.</p>
+  </div>
+</section>
+
+<!-- ================= 7. GRADIENT DESCENT ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">07 · The Strategy For Getting Better</div>
+    <h2 class="title">Gradient descent — basically, walking downhill</h2>
+    <p class="lede">A function of 13,000 variables is impossible to picture in your head. Lucky for us, the strategy for minimizing it is identical to the one you'd use for a function of a single variable.</p>
+
+    <p>Picture the cost function as a landscape, hills and valleys, and a ball sitting somewhere on it. You want that ball to roll down into a valley — a spot where the cost is low. At any point you're standing, the slope tells you which way is downhill: positive slope, step left; negative slope, step right. Keep checking the slope and taking small steps, and you'll eventually settle into a valley.</p>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 760 260" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 30 60 C 150 230, 230 230, 320 120 C 380 40, 460 230, 560 200 C 630 180, 680 60, 730 30" fill="none" stroke="#5C7A99" stroke-width="2.4"/>
+          <circle cx="320" cy="120" r="9" fill="#FFB454" class="pulse"/>
+          <circle cx="560" cy="200" r="9" fill="#E7714F" opacity="0.85"/>
+          <line x1="320" y1="120" x2="280" y2="172" stroke="#FFB454" stroke-width="1.6" marker-end="url(#arrowG)"/>
+          <defs>
+            <marker id="arrowG" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L8,3 L0,6 Z" fill="#FFB454"/>
+            </marker>
+          </defs>
+          <text x="320" y="100" text-anchor="middle" fill="#E7E5DC" font-family="JetBrains Mono" font-size="12">step downhill</text>
+          <text x="195" y="230" text-anchor="middle" fill="#FFB454" font-family="JetBrains Mono" font-size="12">global minimum</text>
+          <text x="560" y="225" text-anchor="middle" fill="#E7714F" font-family="JetBrains Mono" font-size="12">a local minimum</text>
+        </svg>
+      </div>
+      <figcaption>FIG 4 — gradient descent only promises you'll find <em>a</em> valley, not necessarily the deepest one on the whole landscape. Where you happen to start (i.e. your random initial weights) decides which valley you end up in.</figcaption>
+    </figure>
+
+    <p>For functions of more than one variable, "slope" gets upgraded to the <strong>gradient</strong>, written \(\nabla C\) — a vector pointing in the direction the function increases fastest. Flip its sign, \(-\nabla C\), and now it points downhill. Its length also tells you how steep that downhill direction is.</p>
+
+    <p>None of that logic changes when you scale up from 2 dimensions to 13,000. Line up every weight and bias into one enormous vector \(\theta\), and \(-\nabla C(\theta)\) is a single direction in that 13,000-dimensional space telling you precisely how to tweak every one of those numbers to drop the cost as fast as possible. With a step size \(\eta\) (the <strong>learning rate</strong>), one update looks like:</p>
+
+    <div class="math-box">
+      \[ \theta \leftarrow \theta - \eta \, \nabla C(\theta) \]
+    </div>
+
+    <p>Repeat that update again and again — that whole loop is gradient descent. And here's a detail worth sitting with: the size of each individual component inside \(\nabla C\) isn't just a "go up or down" signal. Its magnitude tells you how much that one weight actually matters for the current cost — which of the 13,000 dials is worth turning, and which one barely makes a difference. We'll lean on that idea heavily in the next section.</p>
+
+    <div class="aside">
+      <span class="term">Side note</span>
+      This is also why artificial neurons use smooth activations instead of a strict on/off switch like real neurons. Gradient descent needs an actual slope to follow. A jagged, binary surface doesn't really have one.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 8. BACKPROPAGATION ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">08 · The Part That Actually Took Me A Few Tries</div>
+    <h2 class="title">Backpropagation — figuring out who's to blame</h2>
+    <p class="lede">Gradient descent tells you the plan: walk downhill. It doesn't tell you which way downhill <em>is</em> in a 13,000-dimensional space. That's backpropagation's entire job — and once you walk through it slowly, it's not actually that scary.</p>
+
+    <h3 class="sub-title">Start with what one training image "wants"</h3>
+    <p>Say you feed in an image of a handwritten 2. The network hasn't been trained yet, so the output layer is a mess — random-ish activations like 0.5, 0.8, 0.2, scattered across all ten output neurons, instead of a clean 1 on "2" and 0 everywhere else.</p>
+
+    <p>We can't reach into the network and directly set that "2" neuron's activation to 1. We only get to adjust weights and biases. But it's useful to write down what this neuron <em>wishes</em> would happen — and there are exactly three levers that could push its activation up:</p>
+
+    <ul class="clean">
+      <li><strong>Increase the bias</strong> on that neuron. The simplest lever — directly lowers its threshold to fire.</li>
+      <li><strong>Increase the weights</strong> coming from whichever previous-layer neurons are already bright, since a weight's effect scales with how active the neuron behind it is. Bumping up a weight attached to a dim neuron barely moves anything; bumping up a weight attached to a bright one moves a lot.</li>
+      <li><strong>Change the previous layer's activations</strong> — make everything connected with a positive weight brighter, and everything connected with a negative weight dimmer.</li>
+    </ul>
+
+    <p>That third option is the interesting one, because we can't touch it directly either — but we can write down the wish, and pass it backward, like a memo: "hey, second-to-last layer, here's how I'd like you to change." Recurse that same logic one layer further back, and the layer after that, and you've got the whole algorithm in spirit.</p>
+
+    <h3 class="sub-title">Every output neuron has its own opinion</h3>
+    <p>Here's the catch: there isn't just one output neuron with wishes. All ten of them do. The "2" neuron wants to get brighter. The "8" neuron, the "3" neuron, all the others, want to get dimmer — and each one has its own idea about how the second-to-last layer should change to make that happen, scaled by how strong the relevant weight is and by how far off that output currently is from its target.</p>
+
+    <p>So you don't just listen to one neuron's request. You add together every output neuron's wish for that hidden layer, and that combined signal is what actually propagates backward.</p>
+
+    <div class="aside">
+      <span class="term">A small, honest tangent</span>
+      There's an old idea in neuroscience that fits this surprisingly well: cells that fire together end up wired together. The biggest weight increases happen between neurons that are already active and the ones we're trying to make more active. I'm not saying this proves anything about how real brains work — that's a much bigger claim than I can make — but the match with the math here is fun to notice.
+    </div>
+
+    <h3 class="sub-title">If we only listened to one image, we'd have a problem</h3>
+    <p>If we only ever optimized for that one picture of a 2, the network would happily learn to call <em>everything</em> a 2 — that's the fastest way to satisfy a single training example. So this entire backward pass — calculate what every weight and bias "should" change by — gets run separately for every training example, and then all those desired changes get averaged together.</p>
+
+    <p>Picture an enormous spreadsheet: one column per training image, one row per weight. Each cell holds how much that one image thinks that one weight should change.</p>
+
+    <figure>
+      <div class="fig-card light">
+        <table class="nudge-table">
+          <tr><th></th><th>"2"</th><th>"5"</th><th>"0"</th><th>"4"</th><th>"1"</th><th>"9"</th><th>average →</th></tr>
+          <tr><td>w₀</td><td class="nudge-neg">−0.08</td><td class="nudge-pos">+0.02</td><td class="nudge-neg">−0.02</td><td class="nudge-pos">+0.11</td><td class="nudge-neg">−0.05</td><td class="nudge-neg">−0.14</td><td class="nudge-neg">−0.08</td></tr>
+          <tr><td>w₁</td><td class="nudge-neg">−0.11</td><td class="nudge-pos">+0.11</td><td class="nudge-pos">+0.07</td><td class="nudge-pos">+0.02</td><td class="nudge-pos">+0.09</td><td class="nudge-pos">+0.05</td><td class="nudge-pos">+0.12</td></tr>
+          <tr><td>w₂</td><td class="nudge-neg">−0.07</td><td class="nudge-neg">−0.04</td><td class="nudge-neg">−0.01</td><td class="nudge-pos">+0.02</td><td class="nudge-pos">+0.13</td><td class="nudge-neg">−0.15</td><td class="nudge-neg">−0.06</td></tr>
+          <tr><td>⋮</td><td>⋮</td><td>⋮</td><td>⋮</td><td>⋮</td><td>⋮</td><td>⋮</td><td>⋮</td></tr>
+          <tr><td>w₁₃,₀₀₁</td><td class="nudge-pos">+0.13</td><td class="nudge-pos">+0.08</td><td class="nudge-neg">−0.06</td><td class="nudge-neg">−0.09</td><td class="nudge-neg">−0.02</td><td class="nudge-pos">+0.04</td><td class="nudge-pos">+0.04</td></tr>
+        </table>
+      </div>
+      <figcaption>FIG 5 — every training image has its own opinion about every single weight. Average each row across all of them, and that final column is, give or take, the negative gradient — the exact downhill direction gradient descent was asking for.</figcaption>
+    </figure>
+
+    <p>So when you hear "the negative gradient of the cost function," this is really all it is under the hood: take every training example's wish-list for the weights, average it row by row, and you've got your direction to step.</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ -\nabla C(w_1, w_2, \dots, w_{13{,}001}) = \begin{bmatrix}-0.08\\+0.12\\-0.06\\ \vdots \\+0.04\end{bmatrix} \]
+    </div>
+
+    <h3 class="sub-title">Now let's actually do the calculus</h3>
+    <p>Everything above is the intuition. Here's the part where we earn it with real math. The trick that makes it manageable: don't try to write the calculus for the whole tangled network at once. Strip it down to the smallest possible version first, one neuron per layer, get totally comfortable there, and only then let extra neurons back in. (One more thing before we dive in: we're using squared error for \(C_0\) here, not cross-entropy, purely because it keeps the derivatives short and friendly. Swap in cross-entropy later and the overall shape of the algorithm, the chain rule, the backward recursion, all of it, stays exactly the same. Only the very last derivative, \(\partial C_0/\partial a^{(L)}\), changes its formula.)</p>
+
+    <h3 class="sub-title">Step 1 — the smallest network you can draw</h3>
+    <p>One neuron per layer, four layers, nothing else going on:</p>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 420 80" xmlns="http://www.w3.org/2000/svg">
+          <g stroke="#5C7A99" stroke-width="1.2"><line x1="40" y1="40" x2="140" y2="40"/><line x1="140" y1="40" x2="240" y2="40"/><line x1="240" y1="40" x2="340" y2="40"/></g>
+          <g stroke="#8B92A1" stroke-width="1.4" fill="#181C26"><circle cx="40" cy="40" r="13"/><circle cx="140" cy="40" r="13"/><circle cx="240" cy="40" r="13"/><circle cx="340" cy="40" r="13"/></g>
+        </svg>
+      </div>
+      <figcaption>FIG 5a — one neuron per layer, four layers deep. The cost is a function of every weight and bias along this chain: \(C(w_1,b_1,w_2,b_2,w_3,b_3)\).</figcaption>
+    </figure>
+
+    <p>Now zoom in further — just the very last connection, between the second-to-last neuron and the last one. That's the only piece of the picture we need for the first round of calculus:</p>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 260 70" xmlns="http://www.w3.org/2000/svg">
+          <line x1="40" y1="35" x2="220" y2="35" stroke="#5C7A99" stroke-width="1.2"/>
+          <circle cx="40" cy="35" r="13" stroke="#8B92A1" stroke-width="1.4" fill="#181C26"/>
+          <circle cx="220" cy="35" r="13" stroke="#FFB454" stroke-width="1.8" fill="#181C26"/>
+          <text x="40" y="60" font-family="JetBrains Mono" font-size="13" fill="#B9BFCC" text-anchor="middle">a&#770;(L−1)</text>
+          <text x="220" y="60" font-family="JetBrains Mono" font-size="13" fill="#FFB454" text-anchor="middle">a&#770;(L)</text>
+        </svg>
+      </div>
+      <figcaption>FIG 5b — quick note: "L" and "L−1" just mean "this layer" and "the layer before it." They look like exponents but they aren't.</figcaption>
+    </figure>
+
+    <p>Let \(y\) be the desired output for this last neuron. The cost for one training example, restricted to just this one neuron, is:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ C_0 = \big(a^{(L)} - y\big)^2 \]
+    </div>
+    <p>where \(a^{(L)}\) is determined the same way every activation is:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ z^{(L)} = w^{(L)} a^{(L-1)} + b^{(L)}, \qquad a^{(L)} = \sigma\big(z^{(L)}\big) \]
+    </div>
+
+    <h3 class="sub-title">Step 2 — follow the dependency chain</h3>
+    <p>\(w^{(L)}\), \(a^{(L-1)}\), and \(b^{(L)}\) all feed into \(z^{(L)}\). \(z^{(L)}\) feeds into \(a^{(L)}\). \(a^{(L)}\), together with \(y\), feeds into \(C_0\):</p>
+    <div class="math-box" style="text-align:center; font-family:'JetBrains Mono',monospace; font-size:14px;">
+      w<sup>(L)</sup>, a<sup>(L−1)</sup>, b<sup>(L)</sup> &nbsp;→&nbsp; z<sup>(L)</sup> &nbsp;→&nbsp; a<sup>(L)</sup> &nbsp;→&nbsp; C₀ &nbsp;(also depends on y)
+    </div>
+    <p>A tiny nudge to \(w^{(L)}\) causes a tiny nudge to \(z^{(L)}\), which causes a tiny nudge to \(a^{(L)}\), which causes a tiny nudge to \(C_0\). What we actually want is the ratio of that very last nudge to the very first one — that's the derivative we're hunting for:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ \frac{\partial C_0}{\partial w^{(L)}} \]
+    </div>
+
+    <h3 class="sub-title">Step 3 — the chain rule turns one hard question into three easy ones</h3>
+    <p>Because the effect of \(w^{(L)}\) has to travel through \(z\) and then through \(a\) before it reaches \(C_0\), the chain rule lets us break this one long-distance question into three short, local ones:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ \frac{\partial C_0}{\partial w^{(L)}} = \frac{\partial z^{(L)}}{\partial w^{(L)}} \cdot \frac{\partial a^{(L)}}{\partial z^{(L)}} \cdot \frac{\partial C_0}{\partial a^{(L)}} \]
+    </div>
+    <p>Each one of those three factors is something you can just read off the equations above:</p>
+    <ul class="clean">
+      <li>\(\dfrac{\partial C_0}{\partial a^{(L)}} = 2\big(a^{(L)} - y\big)\) — bigger when the network is more wrong.</li>
+      <li>\(\dfrac{\partial a^{(L)}}{\partial z^{(L)}} = \sigma'\big(z^{(L)}\big)\) — the activation function's own slope at that point.</li>
+      <li>\(\dfrac{\partial z^{(L)}}{\partial w^{(L)}} = a^{(L-1)}\) — same idea as before: a weight's leverage scales with how bright the neuron behind it already is.</li>
+    </ul>
+
+    <h3 class="sub-title">Step 4 — put it together</h3>
+    <div class="math-box" style="text-align:center;">
+      \[ \frac{\partial C_0}{\partial w^{(L)}} = a^{(L-1)} \, \sigma'\big(z^{(L)}\big) \, 2\big(a^{(L)} - y\big) \]
+    </div>
+    <p>That's the derivative for <em>one</em> training example, with respect to <em>one</em> weight. The bias works out almost identically — swap \(\partial z/\partial w = a^{(L-1)}\) for \(\partial z/\partial b = 1\), since the bias isn't multiplied by anything:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ \frac{\partial C_0}{\partial b^{(L)}} = 1 \cdot \sigma'\big(z^{(L)}\big) \cdot 2\big(a^{(L)} - y\big) \]
+    </div>
+    <p>And remember, all of this is just for one training example. The real gradient — the thing gradient descent actually steps along — averages it over every example you've got, and stacks every weight's and every bias's derivative into one big vector:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ \frac{\partial C}{\partial w^{(L)}} = \frac{1}{n}\sum_{k=0}^{n-1} \frac{\partial C_k}{\partial w^{(L)}} \qquad\qquad \nabla C = \begin{bmatrix} \partial C/\partial w^{(1)} \\ \partial C/\partial b^{(1)} \\ \vdots \\ \partial C/\partial w^{(L)} \\ \partial C/\partial b^{(L)} \end{bmatrix} \]
+    </div>
+
+    <h3 class="sub-title">Step 5 — propagating backward, one layer further</h3>
+    <p>This is where the "back" in backpropagation earns its name. The same chain rule also tells us how sensitive the cost is to the <em>previous</em> layer's activation, \(a^{(L-1)}\) — just shifted over by one layer:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ \frac{\partial C_0}{\partial a^{(L-1)}} = \frac{\partial z^{(L)}}{\partial a^{(L-1)}} \cdot \frac{\partial a^{(L)}}{\partial z^{(L)}} \cdot \frac{\partial C_0}{\partial a^{(L)}}, \qquad \frac{\partial z^{(L)}}{\partial a^{(L-1)}} = w^{(L)} \]
+    </div>
+    <p>We still can't directly change \(a^{(L-1)}\) — but now that we know how sensitive the cost is to it, we can repeat this exact same process one more layer back, treating \(a^{(L-1)}\) the way we just treated \(a^{(L)}\). That's the recursion: keep walking backward, one layer at a time, reusing the same three-step chain rule every time.</p>
+
+    <p>Everything above was for <strong>one neuron per layer</strong>. Now let's let real layers — with many neurons each — back in, and see exactly what changes.</p>
+
+    <h3 class="sub-title">Step 6 — now give layers more than one neuron</h3>
+    <p>I'll be honest, this was the part that confused me the most on a first watch, because suddenly there are indices everywhere. But conceptually, almost nothing new happens — you're just summing over more paths. Index neurons in layer \(L\!-\!1\) (the source layer) with \(k\), and neurons in layer \(L\) (the destination layer) with \(j\). The weight connecting source neuron \(k\) to destination neuron \(j\) is \(w^{(L)}_{jk}\) — read it as "destination, then source." It looks reversed at first, but it matches how the weight matrix was set up earlier, so it's worth getting used to.</p>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 380 180" xmlns="http://www.w3.org/2000/svg">
+          <g stroke="#5C7A99" stroke-width="1">
+            <line x1="40" y1="30" x2="220" y2="60"/><line x1="40" y1="30" x2="220" y2="120"/>
+            <line x1="40" y1="90" x2="220" y2="60"/><line x1="40" y1="90" x2="220" y2="120"/>
+            <line x1="40" y1="150" x2="220" y2="60"/><line x1="40" y1="150" x2="220" y2="120"/>
+          </g>
+          <g stroke="#8B92A1" stroke-width="1.4" fill="#181C26">
+            <circle cx="40" cy="30" r="11"/><circle cx="40" cy="90" r="11" stroke="#FFB454"/><circle cx="40" cy="150" r="11"/>
+            <circle cx="220" cy="60" r="11"/><circle cx="220" cy="120" r="11"/>
+          </g>
+          <rect x="270" y="40" width="34" height="34" fill="none" stroke="#E7714F" stroke-width="1.4"/>
+          <rect x="270" y="100" width="34" height="34" fill="none" stroke="#E7714F" stroke-width="1.4"/>
+          <text x="287" y="62" font-family="JetBrains Mono" font-size="12" fill="#B9BFCC" text-anchor="middle">y₀</text>
+          <text x="287" y="122" font-family="JetBrains Mono" font-size="12" fill="#B9BFCC" text-anchor="middle">y₁</text>
+          <text x="40" y="170" font-family="JetBrains Mono" font-size="11" fill="#B9BFCC" text-anchor="middle">a&#770;(L−1)</text>
+          <text x="220" y="155" font-family="JetBrains Mono" font-size="11" fill="#B9BFCC" text-anchor="middle">a&#770;(L)</text>
+          <text x="287" y="155" font-family="JetBrains Mono" font-size="11" fill="#B9BFCC" text-anchor="middle">desired output</text>
+        </svg>
+      </div>
+      <figcaption>FIG 5c — the amber neuron in layer L−1 connects to every neuron in layer L. Its activation influences the cost through more than one path, so we'll need to sum over all of them.</figcaption>
+    </figure>
+
+    <p>The cost for one example now sums over every output neuron, not just one:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ C_0 = \sum_{j=0}^{n_L - 1} \big(a_j^{(L)} - y_j\big)^2, \qquad z_j^{(L)} = w_{j0}^{(L)} a_0^{(L-1)} + w_{j1}^{(L)} a_1^{(L-1)} + w_{j2}^{(L)} a_2^{(L-1)} + b_j^{(L)} \]
+    </div>
+
+    <p>The derivative with respect to one specific weight, \(\partial C_0/\partial w_{jk}^{(L)}\), looks exactly like before — it only ever refers to one path through one specific \(j\), so nothing new there:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ \frac{\partial C_0}{\partial w_{jk}^{(L)}} = \frac{\partial z_j^{(L)}}{\partial w_{jk}^{(L)}} \cdot \frac{\partial a_j^{(L)}}{\partial z_j^{(L)}} \cdot \frac{\partial C_0}{\partial a_j^{(L)}} \]
+    </div>
+
+    <p>But here's the new wrinkle: a single neuron in layer \(L\!-\!1\) doesn't just feed into one neuron in the next layer — it feeds into <em>all</em> of them. So its derivative with respect to an <strong>activation</strong> in the previous layer, \(a_k^{(L-1)}\), has to add up its influence through every path it took to get there:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ \frac{\partial C_0}{\partial a_k^{(L-1)}} = \sum_{j=0}^{n_L - 1} \frac{\partial z_j^{(L)}}{\partial a_k^{(L-1)}} \cdot \frac{\partial a_j^{(L)}}{\partial z_j^{(L)}} \cdot \frac{\partial C_0}{\partial a_j^{(L)}} \]
+    </div>
+
+    <div class="def">
+      <span class="term">What's actually new here</span>
+      Nothing about the chain rule itself changed. The only new idea is the sum: a neuron in layer L−1 affects the cost once through each neuron in layer L it connects to, so you add up its effect through every one of those connections. Everything inside the sum is the exact same three-step chain rule as the single-neuron case — we're just doing it once per path and adding the results.
+    </div>
+
+    <p>Put it all together, generalize the layer index from \(L\) to any layer \(l\), and you get the full, general backpropagation formula — the one that actually runs inside real training code:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ \frac{\partial C}{\partial w_{jk}^{(l)}} = a_k^{(l-1)} \, \sigma'\big(z_j^{(l)}\big) \, \frac{\partial C}{\partial a_j^{(l)}} \]
+    </div>
+    <p>where that last piece, \(\partial C/\partial a_j^{(l)}\), is exactly \(2(a_j^{(L)} - y_j)\) if \(l\) happens to be the very last layer — or, if there are layers after it, the same summed expression from above, reaching forward into the next layer:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ \frac{\partial C}{\partial a_j^{(l)}} = \sum_{i=0}^{n_{l+1}-1} w_{ij}^{(l+1)} \, \sigma'\big(z_i^{(l+1)}\big) \, \frac{\partial C}{\partial a_i^{(l+1)}} \]
+    </div>
+
+    <p>And that's really the whole algorithm. You compute it starting at the output layer, where the formula is simple, and walk backward — each layer's answer depends on the layer after it, which you've already computed. That dependency on "the layer after it" is exactly why you have to go in this order, output to input, and exactly why it's called <em>back</em>propagation rather than just "propagation."</p>
+
+    <h3 class="sub-title">Why nobody actually averages over the whole dataset every step</h3>
+    <p>In theory, one proper gradient-descent step needs this averaged over every training image — all sixty-thousand-something of them in MNIST. In practice, that's brutally slow to do before every single update. So instead, people shuffle the data, chop it into small <strong>mini-batches</strong> (say, 100 images at a time), and compute a step using just one mini-batch.</p>
+
+    <p>It's not the true gradient, just a rough guess at it. Think of someone checking the slope under their feet every few steps and adjusting, instead of stopping to carefully survey the whole hill before each move. The guesses are noisier, but on average they still head downhill, and you save a ton of time. This shortcut has a name: <strong>stochastic gradient descent (SGD)</strong>, and it's what almost every real network actually uses to train.</p>
+  </div>
+</section>
+
+<!-- ================= 9. TRAINING LOOP ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">09 · Zooming Back Out</div>
+    <h2 class="title">How all of this fits into one repeating loop</h2>
+    <p class="lede">Forward propagation, the cost function, backpropagation, gradient descent — none of these are separate tools you reach for one at a time. They're one loop, run over and over, thousands of times.</p>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 600 400" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrowC" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L7,3 L0,6 Z" fill="#5C7A99"/>
+            </marker>
+          </defs>
+          <g font-family="JetBrains Mono" font-size="13" text-anchor="middle">
+            <rect x="210" y="10" width="180" height="56" rx="8" fill="#181C26" stroke="#FFB454"/><text x="300" y="43" fill="#FFB454">Forward Propagation</text>
+            <rect x="380" y="115" width="190" height="56" rx="8" fill="#181C26" stroke="#33425a"/><text x="475" y="148" fill="#E7E5DC">Prediction</text>
+            <rect x="380" y="225" width="190" height="56" rx="8" fill="#181C26" stroke="#33425a"/><text x="475" y="258" fill="#E7E5DC">Loss Function</text>
+            <rect x="210" y="330" width="180" height="56" rx="8" fill="#181C26" stroke="#33425a"/><text x="300" y="363" fill="#E7E5DC">Calculate Error</text>
+            <rect x="30" y="225" width="190" height="56" rx="8" fill="#181C26" stroke="#33425a"/><text x="125" y="258" fill="#E7E5DC">Backpropagation</text>
+            <rect x="30" y="115" width="190" height="56" rx="8" fill="#181C26" stroke="#33425a"/><text x="125" y="148" fill="#E7E5DC">Update Weights</text>
+          </g>
+          <g stroke="#5C7A99" stroke-width="1.6" fill="none">
+            <path d="M390 38 C 430 50, 460 80, 475 115" marker-end="url(#arrowC)"/>
+            <path d="M475 171 C 475 195, 475 200, 475 225" marker-end="url(#arrowC)"/>
+            <path d="M475 281 C 460 305, 430 320, 390 343" marker-end="url(#arrowC)"/>
+            <path d="M210 358 C 170 345, 145 320, 125 281" marker-end="url(#arrowC)"/>
+            <path d="M125 225 C 125 205, 125 195, 125 171" marker-end="url(#arrowC)"/>
+            <path d="M125 115 C 145 80, 170 50, 210 38" marker-end="url(#arrowC)"/>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 6 — predict, measure the error, blame the right weights for it, nudge them a little, and start over. That's a neural network "learning," in full.</figcaption>
+    </figure>
+
+    <table>
+      <tr><th>Stage</th><th>Question it's answering</th></tr>
+      <tr><td>Forward propagation</td><td>What did I predict?</td></tr>
+      <tr><td>Loss function</td><td>How wrong was I?</td></tr>
+      <tr><td>Backpropagation</td><td>Why was I wrong — which weights caused it, and how much?</td></tr>
+      <tr><td>Gradient descent</td><td>Given that, how should I change the weights?</td></tr>
+    </table>
+
+    <h3 class="sub-title">A few words you'll keep bumping into</h3>
+    <div class="def"><span class="term">Epoch</span> One full pass through the entire training set.</div>
+    <div class="def"><span class="term">Batch size</span> How many training examples get processed before the weights actually update once.</div>
+    <div class="def"><span class="term">Iteration</span> One mini-batch processed, one update made. Dataset of 50,000 with batch size 500 gives you \(50{,}000 / 500 = 100\) iterations per epoch.</div>
+
+    <p>Quick worked example, since numbers stick better than definitions: dataset of 10,000 images, batch size 200, training for 10 epochs.</p>
+    <div class="math-box">
+      \[ \text{iterations per epoch} = \frac{10{,}000}{200} = 50 \qquad\qquad \text{total iterations} = 50 \times 10 = 500 \]
+    </div>
+  </div>
+</section>
+
+<!-- ================= 10. LEARNING RATE ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">10 · One Number, Big Consequences</div>
+    <h2 class="title">Learning rate — how big a step downhill</h2>
+    <p class="lede">Remember \(\eta\) from the update rule, \(\theta \leftarrow \theta - \eta \nabla C(\theta)\)? That single number controls exactly one thing: step size. Get it wrong and training breaks in two very different ways depending on which direction you got it wrong.</p>
+
+    <div class="threecol">
+      <div class="fig-card light">
+        <svg viewBox="0 0 220 140" xmlns="http://www.w3.org/2000/svg">
+          <line x1="15" y1="120" x2="205" y2="120" stroke="#E3DECE"/><line x1="15" y1="10" x2="15" y2="120" stroke="#E3DECE"/>
+          <path d="M 20 30 Q 100 60 200 95" fill="none" stroke="#E7714F" stroke-width="2.4"/>
+        </svg>
+        <figcaption style="border:none; padding-top:6px;"><strong>Too small.</strong> Technically learning — just painfully, frustratingly slowly.</figcaption>
+      </div>
+      <div class="fig-card light">
+        <svg viewBox="0 0 220 140" xmlns="http://www.w3.org/2000/svg">
+          <line x1="15" y1="120" x2="205" y2="120" stroke="#E3DECE"/><line x1="15" y1="10" x2="15" y2="120" stroke="#E3DECE"/>
+          <path d="M 20 60 L 50 100 L 80 30 L 110 110 L 140 25 L 170 105 L 200 40" fill="none" stroke="#E7714F" stroke-width="2.2"/>
+        </svg>
+        <figcaption style="border:none; padding-top:6px;"><strong>Too large.</strong> You overshoot every valley you're aiming for. Loss bounces around instead of settling down.</figcaption>
+      </div>
+      <div class="fig-card light">
+        <svg viewBox="0 0 220 140" xmlns="http://www.w3.org/2000/svg">
+          <line x1="15" y1="120" x2="205" y2="120" stroke="#E3DECE"/><line x1="15" y1="10" x2="15" y2="120" stroke="#E3DECE"/>
+          <path d="M 20 25 C 80 45, 120 95, 200 105" fill="none" stroke="#5FAE82" stroke-width="2.6"/>
+        </svg>
+        <figcaption style="border:none; padding-top:6px;"><strong>Just right.</strong> Smooth, steady, boringly reliable — exactly what you want.</figcaption>
+      </div>
+    </div>
+
+    <p>One nice bit of self-correction baked into this: if your step size scales with the slope, then as you approach the bottom of a valley and the slope flattens out, your steps naturally shrink too. That's part of why gradient descent tends to settle gently into a minimum instead of flying past it — assuming your learning rate wasn't set wildly too high to begin with.</p>
+  </div>
+</section>
+
+<!-- ================= 11. OVER/UNDERFITTING ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">11 · Knowing When To Stop (Or Keep Going)</div>
+    <h2 class="title">Overfitting and underfitting</h2>
+    <p class="lede">A network chasing the lowest possible training loss can "win" in a hollow way — by memorizing the training set instead of actually learning anything that generalizes. There's an opposite failure too, and it's just as common for beginners to hit.</p>
+
+    <div class="def">
+      <span class="term">Overfitting</span>
+      Training accuracy looks great — 99%, say — but validation accuracy lags behind at 85%. The network has memorized the training images, noise and all, instead of learning the underlying pattern. It aced the practice test by memorizing the answer key, not by understanding the material.
+    </div>
+    <div class="def">
+      <span class="term">Underfitting</span>
+      The opposite problem: training accuracy is mediocre (60%) and validation accuracy is just as mediocre (58%). The model never really learned the pattern in the first place — usually because it's too simple, undertrained, or the learning rate is off.
+    </div>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 700 240" xmlns="http://www.w3.org/2000/svg">
+          <line x1="40" y1="200" x2="660" y2="200" stroke="#33425a"/>
+          <line x1="40" y1="20" x2="40" y2="200" stroke="#33425a"/>
+          <path d="M 50 170 C 150 120, 300 60, 650 40" fill="none" stroke="#FFB454" stroke-width="2.4"/>
+          <path d="M 50 180 C 150 140, 280 90, 380 95 C 480 100, 560 140, 650 175" fill="none" stroke="#E7714F" stroke-width="2.4"/>
+          <text x="660" y="36" fill="#FFB454" font-family="JetBrains Mono" font-size="12" text-anchor="end">training loss</text>
+          <text x="660" y="195" fill="#E7714F" font-family="JetBrains Mono" font-size="12" text-anchor="end">validation loss</text>
+          <line x1="380" y1="20" x2="380" y2="200" stroke="#5C7A99" stroke-dasharray="4 4"/>
+          <text x="380" y="14" fill="#8B92A1" font-family="JetBrains Mono" font-size="11" text-anchor="middle">overfitting starts here</text>
+        </svg>
+      </div>
+      <figcaption>FIG 7 — training loss keeps falling forever; validation loss bottoms out and creeps back up. That fork in the road is the moment things start going wrong.</figcaption>
+    </figure>
+
+    <p>This is exactly why people split data three ways instead of two: <strong>train → validate → test.</strong> Training data adjusts the weights. The validation set just watches from the sidelines during training, flagging the moment things start overfitting. The test set never gets touched until the very end — it's your one honest, unbiased check on how the model really performs.</p>
+
+    <div class="def"><span class="term">Early stopping</span> Just stop training the moment validation performance stops improving, even if training loss is still happily dropping. Simple, and it works.</div>
+    <div class="def"><span class="term">Dropout</span> During training, randomly switch off a chunk of neurons on each pass — sounds destructive, but it stops the network from leaning too hard on any one neuron, forcing it to spread its understanding around. That redundancy is what helps it generalize.</div>
+
+    <h3 class="sub-title">The pattern that tells you things are going well</h3>
+    <p>You don't need a fancy diagnostic for this — just watch four numbers move in the direction you want, at the same time: loss going down, accuracy going up, and the validation versions of both doing the same thing alongside them. If training metrics improve while validation metrics stall or worsen, that's your overfitting signal, every time.</p>
+  </div>
+</section>
+
+<!-- ================= 12. REALITY CHECK ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">12 · A Reality Check Worth Sitting With</div>
+    <h2 class="title">Does it actually learn "edges, then loops, then digits"?</h2>
+    <p class="lede">Remember the tidy hierarchy from earlier — pixels into edges, edges into loops, loops into digits? Here's the slightly humbling truth.</p>
+    <p>A plain network like the one we've described, two hidden layers of 16 neurons, trained this way on MNIST, does actually reach somewhere around 96–98% accuracy on digits it's never seen. That's a solid result for something this simple. But if you actually go and visualize the weights it learned — render them as a pixel grid the way we did back in FIG 2 — they mostly don't look like clean edge detectors. They look close to random, with only faint, loose structure if you squint.</p>
+    <p>Push it further: feed the trained network pure random static, no digit in sight. A truly "smart" system might respond with healthy uncertainty — low, evenly-spread activations across all ten outputs, basically shrugging. Instead, it'll often confidently insist the static is some specific digit, just as sure of that nonsense answer as it is of a real, clean 5. It found a valley in that enormous cost landscape that happens to classify real digits well — but it never developed anything like a real concept of "what a digit looks like." It only ever learned to tell the difference between examples inside a small, clean, centered world, because that's the only world its cost function ever showed it.</p>
+    <p>That's not a flaw to be embarrassed about. It's exactly why this simple network is treated as a foundation rather than a finished product. Every idea in this post (weighted sums, activation functions, cost functions, gradients, backpropagation) is the same machinery that more sophisticated modern architectures build on top of, ones that do manage to learn richer, more reusable features. You need this version first.</p>
+  </div>
+</section>
+
+<!-- ================= 13. ANN VS DNN ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">13 · A Quick Vocabulary Check</div>
+    <h2 class="title">ANN vs. DNN — is this even the same thing?</h2>
+    <p class="lede">Short answer: yes, mostly. It's less a hard boundary and more a matter of how many hidden layers you've stacked up.</p>
+    <table>
+      <tr><th></th><th>ANN</th><th>DNN</th></tr>
+      <tr><td>Hidden layers</td><td>One (sometimes the term gets used loosely for "a couple")</td><td>Two or more, often many more</td></tr>
+      <tr><td>Capability</td><td>Simpler — can still learn plenty</td><td>More powerful, can model deeper hierarchies of features</td></tr>
+      <tr><td>Compute cost</td><td>Lower</td><td>Higher — more layers means more backward passes to compute</td></tr>
+    </table>
+    <p>Everything explained in this post — weights, biases, forward propagation, backpropagation — applies identically whether you've got one hidden layer or fifty. "Deep learning" really just means "neural networks, but with enough hidden layers that it became worth giving the deeper version its own name."</p>
+  </div>
+</section>
+
+<!-- ================= 14. PRACTICAL WORKFLOW ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">14 · From Theory To Actually Running Code</div>
+    <h2 class="title">What this looks like outside of a whiteboard</h2>
+    <p class="lede">Everything above is the math. If you actually sat down to build this in code, the steps in practice look less like equations and more like a checklist.</p>
+    <ol class="steps">
+      <li><strong>Load the dataset</strong> — for this example, that's MNIST: tens of thousands of labeled handwritten digit images.</li>
+      <li><strong>Visualize a few images</strong> — just to sanity-check that the data actually looks like what you expect before you trust anything else.</li>
+      <li><strong>Check the shape</strong> — confirm you really do have 28×28 images, and the right number of them.</li>
+      <li><strong>Normalize the pixels</strong> — rescale grayscale values from 0–255 down to 0–1, since that's the range the network expects.</li>
+      <li><strong>Flatten the images</strong> — unroll each 28×28 grid into a single list of 784 numbers, so it can feed into the input layer.</li>
+      <li><strong>One-hot encode the labels</strong> — turn a label like "4" into a vector that's 1 in the 4th slot and 0 everywhere else, matching the output layer's shape.</li>
+      <li><strong>Build the network</strong> — define the layers: input size, hidden layer sizes, output size, and which activation function each layer uses.</li>
+      <li><strong>Compile it</strong> — pick a loss function, an optimizer (a specific flavor of gradient descent), and which metrics you want tracked.</li>
+      <li><strong>Train it</strong> — run the forward-propagation → loss → backpropagation → update loop, epoch after epoch.</li>
+      <li><strong>Evaluate it</strong> — check accuracy on data it's never seen, the test set, not the training set.</li>
+      <li><strong>Build a confusion matrix</strong> — see exactly which digits get mistaken for which other digits.</li>
+      <li><strong>Look at what it got wrong</strong> — pull out the misclassified images by hand and actually look at them. More often than not, you'll find a few that would confuse a human too.</li>
+    </ol>
+    <p>None of these steps require new theory — they're just the practical scaffolding around the actual learning algorithm, the part that turns "I understand backpropagation" into "I have a working model."</p>
+  </div>
+</section>
+
+<!-- ================= 15. CHEAT SHEET ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">15 · For When You Just Need The Short Version</div>
+    <h2 class="title">The cheat sheet</h2>
+    <table>
+      <tr><th>Problem type</th><th>Output activation</th><th>Loss function</th></tr>
+      <tr><td>Binary classification</td><td class="mono">Sigmoid</td><td>Binary cross-entropy</td></tr>
+      <tr><td>Multi-class classification</td><td class="mono">Softmax</td><td>Categorical cross-entropy</td></tr>
+      <tr><td>Hidden layers, general default</td><td class="mono">ReLU</td><td>— not an output layer</td></tr>
+    </table>
+
+    <h3 class="sub-title">If you forget everything else, remember this</h3>
+    <ul class="clean">
+      <li><strong>Forward propagation</strong> makes a guess.</li>
+      <li><strong>The loss function</strong> scores how bad that guess was.</li>
+      <li><strong>Backpropagation</strong> works backward through the chain rule to figure out exactly how much each of the ~13,000 weights and biases is to blame.</li>
+      <li><strong>Gradient descent</strong> nudges every weight a little, in whichever direction actually helps.</li>
+      <li>Do that thousands of times, in small mini-batches, while a validation set quietly watches to make sure you're learning the pattern and not just memorizing the homework.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= FOOTER ================= -->
+<footer>
+  <div class="wrap">
+    <hr class="thin">
+    <p style="color:#C9CDD6; font-size:15.5px;">Built from the <strong>3Blue1Brown</strong> "Neural Networks" series — Introduction, Gradient Descent, Backpropagation Intuition, and Backpropagation Calculus — plus a personal study glossary, all reorganized, diagrammed, and written out in my own words so it actually sticks.</p>
+    <p>If you want to go further than reading, Michael Nielsen's free online book <em>Neural Networks and Deep Learning</em> walks through this exact MNIST example with real, runnable code.</p>
+    <div class="seriesnav">
+      <a href="#">3Blue1Brown — But what is a neural network?</a>
+      <a href="#">3Blue1Brown — Gradient descent, how neural networks learn</a>
+      <a href="#">3Blue1Brown — What is backpropagation really doing?</a>
+      <a href="#">3Blue1Brown — Backpropagation calculus</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
