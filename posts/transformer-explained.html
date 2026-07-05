@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Transformer — Attention Is All You Need (Explained Properly)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js"></script>
+<style>
+  :root{
+    --ink:#1B1F27;
+    --paper:#F6F3EC;
+    --paper-dim:#ECE7DA;
+    --dark:#11141B;
+    --dark-2:#181C26;
+    --amber:#FFB454;
+    --amber-soft:#FFD9A0;
+    --wire-cool:#5C7A99;
+    --wire-cool-dim:#33425a;
+    --muted:#8B92A1;
+    --muted-dark:#6b7280;
+    --red:#E7714F;
+    --green:#5FAE82;
+    --rule: rgba(255,255,255,0.08);
+    --rule-dark: rgba(20,20,20,0.10);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    font-size:17px;
+    line-height:1.72;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:600;
+    letter-spacing:-0.01em;
+    margin:0;
+  }
+  .mono{font-family:'JetBrains Mono',monospace;}
+  a{color:inherit;}
+  p{margin:0 0 1.15em 0;}
+  .wrap{max-width:760px; margin:0 auto; padding:0 28px;}
+  .wrap-wide{max-width:920px; margin:0 auto; padding:0 28px;}
+
+  /* ===== HERO ===== */
+  .hero{
+    background:radial-gradient(ellipse 900px 500px at 50% -10%, #1d2433 0%, var(--dark) 60%);
+    color:var(--paper);
+    padding:104px 0 84px;
+    position:relative;
+    overflow:hidden;
+  }
+  .hero .eyebrow{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--amber);
+    margin-bottom:22px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--amber); box-shadow:0 0 8px 2px var(--amber);}
+  .hero h1{
+    font-size:50px;
+    line-height:1.1;
+    color:#F4F1E8;
+    max-width:680px;
+  }
+  .hero h1 em{ font-style:normal; color:var(--amber); }
+  .hero .sub{
+    margin-top:24px;
+    font-size:18.5px;
+    color:#B9BFCC;
+    max-width:560px;
+  }
+  @media (max-width:640px){ .hero{padding:80px 0 60px;} .hero h1{font-size:34px;} }
+
+  section{padding:80px 0;}
+  section.dark{background:var(--dark); color:#E7E5DC;}
+  section.dark h2, section.dark h3{color:#F4F1E8;}
+  section.paper{background:var(--paper);}
+  section.paper-dim{background:var(--paper-dim);}
+  .kicker{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    letter-spacing:0.13em;
+    text-transform:uppercase;
+    color:var(--amber);
+  }
+  section.paper .kicker, section.paper-dim .kicker{ color:#B5662E; }
+  h2.title{font-size:33px; margin-top:10px; margin-bottom:26px;}
+  h3.sub-title{font-size:21px; margin-top:42px; margin-bottom:14px;}
+  .lede{font-size:19px; color:var(--muted-dark); max-width:620px;}
+  section.dark .lede{color:var(--muted);}
+
+  figure{margin:32px 0;}
+  figure svg{width:100%; height:auto; display:block;}
+  figure img{width:100%; height:auto; display:block; border-radius:8px;}
+  figcaption{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+    color:var(--muted-dark);
+    margin-top:12px;
+    padding-top:10px;
+    border-top:1px solid var(--rule-dark);
+  }
+  section.dark figcaption{color:var(--muted); border-top:1px solid var(--rule);}
+  .fig-card{ background:var(--dark); border-radius:14px; padding:30px 26px 18px; }
+  section.dark .fig-card{ background:#0B0D12; border:1px solid var(--rule); }
+  .fig-card.light{ background:#fff; border:1px solid #E3DECE; }
+  .fig-card.light figcaption{color:var(--muted-dark); border-top:1px solid #ECE6D6;}
+  .fig-card.plain{ background:#fff; border:1px solid #E3DECE; padding:14px; }
+
+  .def{
+    border-left:3px solid var(--amber);
+    background:rgba(255,180,84,0.07);
+    padding:16px 20px;
+    border-radius:0 8px 8px 0;
+    margin:24px 0;
+  }
+  .def .term{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+    color:#B5662E; display:block; margin-bottom:6px;
+  }
+  section.dark .def{background:rgba(255,180,84,0.10);}
+  section.dark .def .term{color:var(--amber);}
+
+  .aside{
+    border-left:3px solid var(--wire-cool);
+    background:rgba(92,122,153,0.07);
+    padding:16px 20px;
+    border-radius:0 8px 8px 0;
+    margin:24px 0;
+    font-size:15.5px;
+  }
+  .aside .term{
+    font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:0.08em; text-transform:uppercase;
+    color:#3d5670; display:block; margin-bottom:6px;
+  }
+  section.dark .aside{background:rgba(92,122,153,0.12);}
+  section.dark .aside .term{color:#9db7cf;}
+
+  .math-box{
+    background:#fff; border:1px solid #E3DECE; border-radius:10px;
+    padding:20px 24px; margin:22px 0; overflow-x:auto;
+  }
+  section.dark .math-box{background:#0B0D12; border-color:var(--rule);}
+
+  table{width:100%; border-collapse:collapse; margin:26px 0; font-size:15.5px;}
+  th,td{padding:12px 14px; text-align:left; border-bottom:1px solid var(--rule-dark);}
+  section.dark th, section.dark td{border-bottom:1px solid var(--rule);}
+  th{font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:0.07em; text-transform:uppercase; color:var(--muted-dark);}
+  section.dark th{color:var(--muted);}
+  td .mono{color:var(--amber);}
+  section.paper td .mono, section.paper-dim td .mono{color:#B5662E;}
+  .nudge-table{font-family:'JetBrains Mono',monospace; font-size:13.5px;}
+  .nudge-table td{text-align:center;}
+  .nudge-table th{text-align:center;}
+  .nudge-pos{color:#3d5670;}
+  .nudge-neg{color:#B5662E;}
+
+  .seriesnav{display:flex; flex-wrap:wrap; gap:10px; margin-top:34px;}
+  .seriesnav a{
+    font-family:'JetBrains Mono',monospace; font-size:12.5px; padding:8px 14px;
+    border:1px solid var(--rule); border-radius:999px; text-decoration:none;
+    color:#C9CDD6; transition:border-color .2s, color .2s;
+  }
+  .seriesnav a:hover{border-color:var(--amber); color:var(--amber);}
+
+  footer{ background:var(--dark); color:var(--muted); padding:60px 0 50px; font-size:14.5px; }
+  footer a{color:var(--amber); text-decoration:none; border-bottom:1px solid rgba(255,180,84,0.3);}
+  hr.thin{border:none; border-top:1px solid var(--rule); margin:30px 0;}
+
+  ul.clean{padding-left:0; list-style:none; margin:18px 0;}
+  ul.clean li{padding-left:22px; position:relative; margin-bottom:10px;}
+  ul.clean li::before{
+    content:""; position:absolute; left:0; top:9px;
+    width:7px; height:7px; border-radius:50%;
+    background:var(--amber); box-shadow:0 0 6px 1px rgba(255,180,84,0.6);
+  }
+  ol.steps{padding-left:22px; margin:18px 0;}
+  ol.steps li{margin-bottom:8px;}
+
+  .twocol{display:grid; grid-template-columns:1fr 1fr; gap:22px;}
+  @media (max-width:680px){.twocol{grid-template-columns:1fr;}}
+  .threecol{display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px;}
+  @media (max-width:780px){.threecol{grid-template-columns:1fr;}}
+
+  .pulse{ animation: pulseGlow 2.6s ease-in-out infinite; }
+  @keyframes pulseGlow{ 0%,100%{ opacity:0.55; } 50%{ opacity:1; } }
+  @media (prefers-reduced-motion: reduce){ .pulse{animation:none;} }
+</style>
+</head>
+<body>
+
+<!-- ================= HERO ================= -->
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow"><span class="dot pulse"></span>MY NOTES ON THE TRANSFORMER, WRITTEN OUT PROPERLY</div>
+    <h1>Nobody tells the model which word "it" refers to. <em>Attention</em> figures that out — by letting every word look at every other word, all at once.</h1>
+    <p class="sub">I went through "Attention Is All You Need" line by line, sat with Jay Alammar's Illustrated Transformer, rewatched the relevant 3Blue1Brown material, and worked through my own class diagram until every arrow made sense. This is that — encoder, decoder, and everything in between — written the way I actually want to remember it.</p>
+
+    <figure style="margin-top:48px;">
+      <div class="fig-card" style="background:#0B0D12; border:1px solid var(--rule);">
+        <svg viewBox="0 0 620 200" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="13" text-anchor="middle">
+            <rect x="10" y="80" width="150" height="50" rx="8" fill="none" stroke="#5FAE82" stroke-width="1.4"/>
+            <text x="85" y="72" fill="#5FAE82" font-size="11">INPUT</text>
+            <text x="85" y="110" fill="#E7E5DC">Je suis étudiant</text>
+
+            <path d="M 165 105 L 225 105" stroke="#FFB454" stroke-width="1.6" fill="none" marker-end="url(#arrH)"/>
+            <defs><marker id="arrH" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#FFB454"/></marker></defs>
+
+            <rect x="230" y="55" width="160" height="100" rx="12" fill="#181C26" stroke="#FFB454" stroke-width="1.6"/>
+            <text x="310" y="100" fill="#FFB454" font-size="14" font-weight="600">THE</text>
+            <text x="310" y="118" fill="#FFB454" font-size="14" font-weight="600">TRANSFORMER</text>
+
+            <path d="M 395 105 L 455 105" stroke="#E7714F" stroke-width="1.6" fill="none" marker-end="url(#arrH2)"/>
+            <defs><marker id="arrH2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#E7714F"/></marker></defs>
+
+            <rect x="460" y="80" width="150" height="50" rx="8" fill="none" stroke="#E7714F" stroke-width="1.4"/>
+            <text x="535" y="72" fill="#E7714F" font-size="11">OUTPUT</text>
+            <text x="535" y="110" fill="#E7E5DC">I am a student</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 0 — the whole thing as a black box. One sentence goes in, a translated sentence comes out. Everything below is what happens inside that box.</figcaption>
+    </figure>
+  </div>
+</header>
+
+<!-- ================= 01. BIG PICTURE ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">01 · The Big Picture, Before Any Math</div>
+    <h2 class="title">What the Transformer actually replaced</h2>
+    <p class="lede">Before 2017, sequence models (translation, summarization, anything language-in-language-out) leaned on RNNs and LSTMs. Those read a sentence one word at a time, carrying a hidden state forward like a relay baton. The Transformer's whole pitch, right there in its title, is that you don't need any of that.</p>
+
+    <p>"Attention Is All You Need" — Vaswani et al., Google Brain/Research, 2017 — proposed a network built <strong>entirely on attention</strong>, with no recurrence and no convolution at all. Their model reached 28.4 BLEU on WMT 2014 English-to-German translation, more than 2 BLEU over the best prior results including ensembles, and a new single-model state of the art of 41.8 BLEU on English-to-French — after training for just 3.5 days on eight GPUs. The point wasn't just accuracy — it was that dropping recurrence let every position in the sequence be processed in parallel instead of one-at-a-time, which is exactly why it trains so much faster.</p>
+
+    <p>Popping open the black box from above, there are two halves: an <strong>encoder</strong> that reads the input sentence and builds a rich internal representation of it, and a <strong>decoder</strong> that takes that representation and generates the output, one token at a time. The original paper stacks six of each on top of each other — there's nothing magical about the number six.</p>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 700 300" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="12.5" text-anchor="middle">
+            <text x="150" y="24" fill="#5FAE82" font-size="11">INPUT</text>
+            <rect x="70" y="34" width="160" height="30" rx="6" fill="none" stroke="#5FAE82"/>
+            <text x="150" y="54" fill="#E7E5DC">Je suis étudiant</text>
+
+            <g fill="#181C26" stroke="#FFB454">
+              <rect x="70" y="90" width="160" height="34" rx="7"/>
+              <rect x="70" y="130" width="160" height="34" rx="7"/>
+              <rect x="70" y="170" width="160" height="34" rx="7"/>
+              <rect x="70" y="210" width="160" height="34" rx="7"/>
+              <rect x="70" y="250" width="160" height="34" rx="7"/>
+            </g>
+            <g fill="#FFB454">
+              <text x="150" y="112">ENCODER</text>
+              <text x="150" y="152">ENCODER</text>
+              <text x="150" y="192">ENCODER</text>
+              <text x="150" y="232">ENCODER</text>
+              <text x="150" y="272">ENCODER</text>
+            </g>
+            <line x1="150" y1="64" x2="150" y2="90" stroke="#33425a"/>
+            <line x1="150" y1="124" x2="150" y2="130" stroke="#33425a"/>
+            <line x1="150" y1="164" x2="150" y2="170" stroke="#33425a"/>
+            <line x1="150" y1="204" x2="150" y2="210" stroke="#33425a"/>
+            <line x1="150" y1="244" x2="150" y2="250" stroke="#33425a"/>
+
+            <path d="M 235 107 C 340 107, 340 107, 445 107" stroke="#5C7A99" stroke-width="1.2" fill="none" marker-end="url(#a1)"/>
+            <path d="M 235 107 C 340 147, 340 147, 445 147" stroke="#5C7A99" stroke-width="1.2" fill="none" marker-end="url(#a1)"/>
+            <path d="M 235 107 C 340 187, 340 187, 445 187" stroke="#5C7A99" stroke-width="1.2" fill="none" marker-end="url(#a1)"/>
+            <path d="M 235 107 C 340 227, 340 227, 445 227" stroke="#5C7A99" stroke-width="1.2" fill="none" marker-end="url(#a1)"/>
+            <path d="M 235 107 C 340 267, 340 267, 445 267" stroke="#5C7A99" stroke-width="1.2" fill="none" marker-end="url(#a1)"/>
+            <defs><marker id="a1" markerWidth="8" markerHeight="8" refX="6" refY="2.5" orient="auto"><path d="M0,0 L6,2.5 L0,5 Z" fill="#5C7A99"/></marker></defs>
+
+            <g fill="#181C26" stroke="#E7714F">
+              <rect x="450" y="90" width="160" height="34" rx="7"/>
+              <rect x="450" y="130" width="160" height="34" rx="7"/>
+              <rect x="450" y="170" width="160" height="34" rx="7"/>
+              <rect x="450" y="210" width="160" height="34" rx="7"/>
+              <rect x="450" y="250" width="160" height="34" rx="7"/>
+            </g>
+            <g fill="#E7714F">
+              <text x="530" y="112">DECODER</text>
+              <text x="530" y="152">DECODER</text>
+              <text x="530" y="192">DECODER</text>
+              <text x="530" y="232">DECODER</text>
+              <text x="530" y="272">DECODER</text>
+            </g>
+            <line x1="530" y1="20" x2="530" y2="90" stroke="#33425a"/>
+            <text x="530" y="14" fill="#E7714F" font-size="11">OUTPUT</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 1 — the encoder stack (left) feeds every one of its final vectors into every decoder block on the right. The encoder runs once; the decoder runs again for each new output word.</figcaption>
+    </figure>
+
+    <div class="aside">
+      <span class="term">Encoder vs decoder, in one line</span>
+      The encoder <em>understands</em> the input. The decoder <em>generates</em> the output, one word at a time, while constantly looking back at what the encoder understood.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 02. TOKENIZATION + EMBEDDING ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">02 · Turning Words Into Numbers</div>
+    <h2 class="title">Tokenization and embedding</h2>
+    <p class="lede">A Transformer can't read letters. Before any of the interesting math happens, the sentence has to become numbers — and it happens in two small steps.</p>
+
+    <p>Take the class-notes example sentence: <span class="mono">"Aakash is a good boy."</span> First it's <strong>tokenized</strong> — split into the smallest units the model works with, and each one is assigned a position:</p>
+
+    <table>
+      <tr><th>Token</th><th>Aakash</th><th>is</th><th>a</th><th>good</th><th>boy</th></tr>
+      <tr><td>Position</td><td class="mono">1</td><td class="mono">2</td><td class="mono">3</td><td class="mono">4</td><td class="mono">5</td></tr>
+    </table>
+
+    <p>Then each token is <strong>embedded</strong> — looked up in a big table (learned during training) and converted into a vector of numbers. In the original paper this vector has dimension \(d_{model} = 512\), the size shared by every sub-layer and every embedding in the model. Modern sub-word tokenizers (byte-pair encoding, word-piece) split rare words into fragments so nothing is ever "unknown," but the principle is identical.</p>
+
+    <div class="def">
+      <span class="term">Embedding, intuitively</span>
+      Think of each word as a single point in a 512-dimensional space. Words with similar meaning sit close together, and directions in that space encode concepts — the classic example is vector(King) − vector(Man) + vector(Woman) ≈ vector(Queen). This is exactly the picture 3Blue1Brown builds up in the GPT/embedding videos: meaning as geometry.
+    </div>
+
+    <p>One detail that matters later: <strong>only the bottom-most encoder does this lookup.</strong> Every encoder above it just receives the 512-dim output vectors of the encoder directly below — the abstraction is identical at every level.</p>
+  </div>
+</section>
+
+<!-- ================= 03. POSITIONAL ENCODING ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">03 · Giving The Model A Sense Of Order</div>
+    <h2 class="title">Positional encoding</h2>
+    <p class="lede">Here's a real problem: the Transformer looks at every token simultaneously. Unlike an RNN, it has no built-in notion of "first" or "last." Without fixing this, "dog bites man" and "man bites dog" would be indistinguishable.</p>
+
+    <p>The fix is to add a second vector, \(P_i\), on top of the word embedding \(E_i\), for every position \(i\):</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ X_i = E_i + P_i \]
+    </div>
+
+    <p>The paper builds these position vectors from sine and cosine functions of different frequencies:</p>
+
+    <div class="math-box">
+      \[ PE_{(pos,\,2i)} = \sin\!\left(\dfrac{pos}{10000^{2i/d_{model}}}\right) \qquad PE_{(pos,\,2i+1)} = \cos\!\left(\dfrac{pos}{10000^{2i/d_{model}}}\right) \]
+    </div>
+    <p>Even dimensions get sine, odd dimensions get cosine, and the wavelengths form a geometric progression from \(2\pi\) up to \(10000 \cdot 2\pi\). The reason this particular function was chosen, rather than a simpler ramp like 1, 2, 3…, is that for any fixed offset \(k\), \(PE_{pos+k}\) can be expressed as a linear function of \(PE_{pos}\) — which hands the model an easy way to learn relative position, not just absolute position.
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 700 220" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="11" fill="#8B92A1">
+            <text x="20" y="18">POSITIONAL ENCODING — 4 example dimensions, positions 0–40</text>
+          </g>
+          <g fill="none" stroke-width="1.6">
+            <path d="M 20 60 Q 100 20, 180 60 T 340 60 T 500 60 T 660 60" stroke="#FFB454"/>
+            <path d="M 20 100 Q 140 40, 260 100 T 500 100 T 660 100" stroke="#E7714F"/>
+            <path d="M 20 140 Q 220 60, 420 140 T 660 140" stroke="#5C7A99"/>
+            <path d="M 20 180 Q 340 90, 660 180" stroke="#5FAE82"/>
+          </g>
+          <g font-family="JetBrains Mono" font-size="11">
+            <text x="670" y="63" fill="#FFB454">dim 0</text>
+            <text x="670" y="103" fill="#E7714F">dim 2</text>
+            <text x="670" y="143" fill="#5C7A99">dim 8</text>
+            <text x="670" y="183" fill="#5FAE82">dim 32</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 2 — lower dimensions oscillate fast (fine-grained position info), higher dimensions oscillate slowly (coarse position info). Stacked together, every position gets a unique fingerprint.</figcaption>
+    </figure>
+
+    <div class="aside">
+      <span class="term">Why not just learn the positions instead?</span>
+      The paper tried learned positional embeddings too, and found the two versions produced nearly identical results. Sinusoidal encoding was kept because it can extrapolate to sequence lengths longer than anything seen during training — a fixed formula doesn't run out of positions the way a learned lookup table would.
+    </div>
+
+    <p>After this step, every token is a single 512-dim vector that encodes <em>both</em> what the word means and where it sits in the sentence. These \(X_1 \ldots X_5\) vectors are what actually enter the first encoder block.</p>
+  </div>
+</section>
+
+<!-- ================= 04. Q K V ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">04 · The Question Every Word Asks</div>
+    <h2 class="title">Creating Query, Key, and Value</h2>
+    <p class="lede">This is where self-attention actually begins. For every token's vector \(X_i\), the model creates three smaller vectors — a Query, a Key, and a Value — by multiplying \(X_i\) against three learned weight matrices.</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ Q = X W^Q \qquad K = X W^K \qquad V = X W^V \]
+    </div>
+    <p>In the paper, queries and keys have dimension \(d_k = 64\) and values have dimension \(d_v = 64\) — smaller than the 512-dim embedding on purpose, so that running eight attention heads in parallel costs roughly the same as one big head.</p>
+
+    <div class="def">
+      <span class="term">Q, K, V — the search-engine analogy</span>
+      <strong>Query:</strong> "what am I looking for?" <strong>Key:</strong> "what do I have to offer, as a label?" <strong>Value:</strong> "what's my actual content?" Think of a search engine: your search term is the Query, each document's label is its Key, and the document's content is its Value. A word's Query gets compared against every other word's Key to decide how much of that word's Value to pull in.
+    </div>
+
+    <p>Do this for all five tokens and you get five Query vectors, five Key vectors, and five Value vectors — stacked into matrices \(Q\), \(K\), \(V\) so the whole thing runs as fast matrix multiplication on a GPU instead of five separate loops.</p>
+  </div>
+</section>
+
+<!-- ================= 05. SCALED DOT-PRODUCT ATTENTION ================= -->
+<section class="paper-dim">
+  <div class="wrap-wide">
+    <div class="kicker">05 · The Core Operation</div>
+    <h2 class="title">Scaled dot-product attention, worked by hand</h2>
+    <p class="lede">Before looking at the matrix formula, it's worth walking through the arithmetic on two real words, the way Jay Alammar's post does it — because every step of the formula maps to something you can actually compute on paper.</p>
+
+    <p>Say the sentence is just <span class="mono">"Thinking Machines"</span> and we're computing the self-attention output for the word <strong>"Thinking"</strong> (position 1).</p>
+
+    <ol class="steps">
+      <li><strong>Score each word against "Thinking":</strong> take the dot product of \(q_1\) (Thinking's query) with every key. \(q_1 \cdot k_1 = 112\), \(q_1 \cdot k_2 = 96\).</li>
+      <li><strong>Scale by \(\sqrt{d_k}\):</strong> divide both scores by \(\sqrt{64} = 8\). \(112/8 = 14\), \(96/8 = 12\).</li>
+      <li><strong>Softmax:</strong> turn the scaled scores into probabilities that sum to 1. Here that comes out to roughly <span class="mono">0.88</span> for "Thinking" and <span class="mono">0.12</span> for "Machines."</li>
+      <li><strong>Weight the Values:</strong> multiply each word's Value vector by its softmax weight — keep what's relevant, drown out what isn't.</li>
+      <li><strong>Sum:</strong> add the weighted Value vectors together. That sum, \(z_1\), is the self-attention output for "Thinking" — a vector that now carries a little bit of "Machines" baked into it.</li>
+    </ol>
+
+    <table class="nudge-table">
+      <tr><th></th><th>Thinking</th><th>Machines</th></tr>
+      <tr><td>Score (q₁·k)</td><td>112</td><td>96</td></tr>
+      <tr><td>Divide by 8</td><td>14</td><td>12</td></tr>
+      <tr><td>Softmax</td><td class="nudge-pos">0.88</td><td>0.12</td></tr>
+    </table>
+
+    <p>Scaling by \(\sqrt{d_k}\) isn't decorative. For large values of \(d_k\), dot products grow large in magnitude, which pushes softmax into regions with extremely small gradients — training stalls. Dividing by \(\sqrt{d_k}\) keeps the numbers in a range where softmax still has useful gradients to learn from.</p>
+
+    <p>In matrix form — the version that actually runs on a GPU across every token at once — all five steps above collapse into one formula:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ \text{Attention}(Q,K,V) = \text{softmax}\!\left(\dfrac{QK^T}{\sqrt{d_k}}\right)V \]
+    </div>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 700 260" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="12" text-anchor="middle">
+            <text x="90" y="24" fill="#8B92A1">Q</text>
+            <rect x="50" y="34" width="80" height="80" fill="none" stroke="#FFB454"/>
+            <text x="240" y="24" fill="#8B92A1">Kᵀ</text>
+            <rect x="200" y="34" width="80" height="80" fill="none" stroke="#E7714F"/>
+            <text x="165" y="80" fill="#E7E5DC" font-size="18">×</text>
+            <text x="330" y="80" fill="#E7E5DC" font-size="14">÷ √d_k</text>
+            <path d="M 290 74 L 380 74" stroke="#33425a" marker-end="url(#a2)"/>
+            <defs><marker id="a2" markerWidth="8" markerHeight="8" refX="6" refY="2.5" orient="auto"><path d="M0,0 L6,2.5 L0,5 Z" fill="#33425a"/></marker></defs>
+            <rect x="390" y="34" width="80" height="80" fill="none" stroke="#5C7A99"/>
+            <text x="430" y="24" fill="#8B92A1">scores</text>
+            <text x="500" y="80" fill="#E7E5DC" font-size="13">softmax →</text>
+            <rect x="580" y="34" width="80" height="80" fill="none" stroke="#5FAE82"/>
+            <text x="620" y="24" fill="#8B92A1">weights</text>
+
+            <text x="90" y="170" fill="#8B92A1">weights</text>
+            <rect x="50" y="180" width="80" height="60" fill="none" stroke="#5FAE82"/>
+            <text x="240" y="170" fill="#8B92A1">V</text>
+            <rect x="200" y="180" width="80" height="60" fill="none" stroke="#FFD9A0"/>
+            <text x="165" y="215" fill="#E7E5DC" font-size="18">×</text>
+            <path d="M 290 210 L 380 210" stroke="#33425a" marker-end="url(#a2)"/>
+            <text x="430" y="170" fill="#8B92A1">Z</text>
+            <rect x="390" y="180" width="80" height="60" fill="none" stroke="#FFB454" stroke-width="2"/>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 3 — the matrix form of the exact same five steps: score, scale, softmax, weight, sum. Output Z is what flows on to the feed-forward network.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ================= 06. MULTI-HEAD ================= -->
+<section class="dark">
+  <div class="wrap-wide">
+    <div class="kicker">06 · The Beast With Many Heads</div>
+    <h2 class="title">Multi-head attention</h2>
+    <p class="lede">One attention calculation gives every word a single lens to look at the sentence through. Multi-head attention gives it eight lenses at once, each free to specialize in something different.</p>
+
+    <p>Instead of performing one attention function with 512-dimensional keys, values, and queries, the model linearly projects Q, K, and V h times with different learned projections, then performs attention in parallel on each projected version. The paper uses \(h = 8\) heads, with \(d_k = d_v = d_{model}/h = 64\) each — so the total computational cost stays close to that of one full-dimensional head.</p>
+
+    <div class="def">
+      <span class="term">Why bother with 8 heads instead of 1?</span>
+      A single head can end up dominated by the word attending to itself. With "The animal didn't cross the street because it was too tired," you want one head that resolves "it" → "animal" while another tracks "it" → "tired." Multi-head attention gives the model multiple representation subspaces to look through at once — averaging across just one head would inhibit exactly this kind of specialization.
+    </div>
+
+    <p>Each head produces its own \(Z\) matrix — eight of them. The feed-forward layer coming next expects a single matrix per token, not eight, so the eight are concatenated side by side and multiplied by one more learned matrix \(W^O\) to project back down to 512 dimensions:</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ \text{MultiHead}(Q,K,V) = \text{Concat}(\text{head}_1, \ldots, \text{head}_8)\,W^O \]
+    </div>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 700 200" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="11" text-anchor="middle" fill="#E7E5DC">
+            <rect x="10" y="20" width="66" height="40" rx="6" fill="#181C26" stroke="#FFB454"/><text x="43" y="44">head₀</text>
+            <rect x="86" y="20" width="66" height="40" rx="6" fill="#181C26" stroke="#E7714F"/><text x="119" y="44">head₁</text>
+            <rect x="162" y="20" width="66" height="40" rx="6" fill="#181C26" stroke="#5C7A99"/><text x="195" y="44">head₂</text>
+            <rect x="238" y="20" width="66" height="40" rx="6" fill="#181C26" stroke="#5FAE82"/><text x="271" y="44">head₃</text>
+            <text x="330" y="44" fill="#8B92A1">···</text>
+            <rect x="360" y="20" width="66" height="40" rx="6" fill="#181C26" stroke="#FFD9A0"/><text x="393" y="44">head₇</text>
+          </g>
+          <g stroke="#33425a"><line x1="43" y1="60" x2="270" y2="120"/><line x1="119" y1="60" x2="270" y2="120"/><line x1="195" y1="60" x2="270" y2="120"/><line x1="271" y1="60" x2="270" y2="120"/><line x1="393" y1="60" x2="270" y2="120"/></g>
+          <g font-family="JetBrains Mono" font-size="12" text-anchor="middle">
+            <rect x="150" y="120" width="240" height="30" rx="6" fill="#181C26" stroke="#8B92A1"/>
+            <text x="270" y="140" fill="#E7E5DC">Concat</text>
+            <path d="M 270 150 L 270 170" stroke="#33425a" marker-end="url(#a3)"/>
+            <defs><marker id="a3" markerWidth="8" markerHeight="8" refX="6" refY="2.5" orient="auto"><path d="M0,0 L6,2.5 L0,5 Z" fill="#33425a"/></marker></defs>
+            <rect x="150" y="175" width="240" height="20" rx="4" fill="none" stroke="#FFB454"/>
+            <text x="270" y="189" fill="#FFB454">× Wᴼ → Z (512-dim)</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 4 — eight heads run in parallel, each producing its own Zᵢ. Concatenate, project with Wᴼ, and you're back to one 512-dim vector per token.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ================= 07. RESIDUAL + NORM ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">07 · Add & Norm</div>
+    <h2 class="title">Residual connections and layer normalization</h2>
+    <p class="lede">After attention produces its output Z, the model does something that looks almost too simple to matter: it adds the original input X back in, then normalizes the result.</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ \text{LayerNorm}(X + \text{Sublayer}(X)) \]
+    </div>
+    <p>This exact pattern — residual connection followed by layer normalization — wraps around both sub-layers in every encoder layer, and every sub-layer in every decoder layer. The reasons it matters:</p>
+
+    <ul class="clean">
+      <li><strong>Preserve original information.</strong> Attention might overwrite something useful; the residual path guarantees the original embedding is never fully lost.</li>
+      <li><strong>Fight vanishing gradients.</strong> The direct path through the addition keeps gradient signal strong across very deep stacks — the same reasoning that made ResNets work for vision.</li>
+      <li><strong>Learn a change, not a whole new representation.</strong> The sub-layer only needs to learn <em>what to adjust</em> about X, which is a much easier optimization problem than learning a full replacement from scratch.</li>
+    </ul>
+
+    <p>Layer normalization then rescales every vector to zero mean and unit variance, with learned scale and shift parameters, so numbers stay in a similar range no matter how deep the stack gets — which is what makes training a 6-layer (or 96-layer) stack numerically stable instead of exploding or vanishing.</p>
+  </div>
+</section>
+
+<!-- ================= 08. FFN ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">08 · Where The Model Stores What It Knows</div>
+    <h2 class="title">Position-wise feed-forward network</h2>
+    <p class="lede">After attention decides what's relevant, each token still needs a chance to actually process that information — independently, without looking at its neighbors again.</p>
+
+    <p>Each layer in the encoder and decoder contains a fully connected feed-forward network, applied to each position separately and identically: two linear transformations with a ReLU in between.</p>
+    <div class="math-box" style="text-align:center;">
+      \[ \text{FFN}(x) = \max(0,\; xW_1 + b_1)\,W_2 + b_2 \]
+    </div>
+    <p>The dimensionality of input and output is \(d_{model} = 512\), while the inner layer expands to \(d_{ff} = 2048\) before shrinking back down. Same weights are reused at every position within a layer — but different layers learn different weights.</p>
+
+    <div class="aside">
+      <span class="term">Attention vs FFN — the split in responsibilities</span>
+      Attention answers "who should I pay attention to, and why?" The FFN is where a lot of the model's factual, associative knowledge is thought to actually live — the part that, once trained, encodes something closer to "here's what I know about this concept," independent of context.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 09. ENCODER RECAP ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">09 · Stacking It Six Times</div>
+    <h2 class="title">The full encoder, end to end</h2>
+    <p class="lede">Put steps 2 through 8 together and one encoder block is complete. Stack six of them and you have the full encoder.</p>
+
+    <p>The encoder is a stack of \(N = 6\) identical layers, each with two sub-layers: multi-head self-attention, then a position-wise feed-forward network — with a residual connection around each, followed by layer normalization. The output of the top encoder block, five vectors \(L_1 \ldots L_5\) in our running example, is the finished, context-rich representation of the input sentence.</p>
+
+    <div class="def">
+      <span class="term">Three facts worth holding onto</span>
+      The encoder runs <strong>once</strong> per input sentence, no matter how long the output ends up being. Every one of its six blocks processes the whole sequence in parallel. And the very last encoder's output — turned into K and V matrices — gets shared with <strong>every</strong> decoder block, not just the first one.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 10. THE CLASS DIAGRAM ================= -->
+<section class="paper">
+  <div class="wrap-wide">
+    <div class="kicker">10 · The Diagram That Ties It Together</div>
+    <h2 class="title">My own class notes, mapped step by step</h2>
+    <p class="lede">This is the diagram I actually drew out while working through the paper and class notes — every numbered step above corresponds to a numbered box here, encoder on the left, decoder on the right, complete architecture in the middle.</p>
+
+    <figure>
+      <div class="fig-card plain">
+        <img src="transformer-class-diagram.png" alt="Hand-drawn class diagram of the complete Transformer encoder and decoder architecture, step by step">
+      </div>
+      <figcaption>FIG 5 — my class diagram, reproduced as-is. Left: one encoder block, numbered steps 1–11. Right: one decoder block, numbered steps 1–8. Center: the complete stacked architecture from the paper.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ================= 11. MASKED SELF-ATTENTION ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">11 · Now The Decoder Side</div>
+    <h2 class="title">Masked multi-head attention — no peeking at the future</h2>
+    <p class="lede">The decoder is autoregressive: it generates one word, feeds that word back in as input, and generates the next. Everything on this side of the diagram exists to make that loop work correctly, both during training and at inference.</p>
+
+    <p>During training, the decoder's input is the target sentence <strong>shifted right</strong> by one position, with a special <span class="mono">&lt;sos&gt;</span> token prepended. This masking, combined with the fact that output embeddings are offset by one position, ensures predictions for position i can depend only on the known outputs at positions less than i.</p>
+
+    <p>The decoder's first attention block is nearly identical to encoder self-attention, with one critical change: future positions are masked out by setting their scores to \(-\infty\) before the softmax step, so the illegal connections become exactly zero after softmax.</p>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 700 190" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="12" text-anchor="middle">
+            <text x="60" y="20" fill="#8B92A1">query \</text>
+            <text x="60" y="34" fill="#8B92A1">key →</text>
+          </g>
+          <g font-family="JetBrains Mono" font-size="11" text-anchor="middle" fill="#8B92A1">
+            <text x="140" y="46">Aakash</text><text x="220" y="46">is</text><text x="300" y="46">a</text><text x="380" y="46">good</text><text x="460" y="46">boy</text>
+          </g>
+          <g font-family="JetBrains Mono" font-size="11" fill="#8B92A1">
+            <text x="20" y="70">Aakash</text><text x="20" y="100">is</text><text x="20" y="130">a</text><text x="20" y="160">good</text><text x="20" y="188">boy</text>
+          </g>
+          <g>
+            <rect x="100" y="58" width="76" height="26" fill="#5FAE82" opacity="0.5"/>
+            <rect x="180" y="58" width="76" height="26" fill="#33425a" opacity="0.6"/><rect x="260" y="58" width="76" height="26" fill="#33425a" opacity="0.6"/><rect x="340" y="58" width="76" height="26" fill="#33425a" opacity="0.6"/><rect x="420" y="58" width="76" height="26" fill="#33425a" opacity="0.6"/>
+
+            <rect x="100" y="88" width="76" height="26" fill="#5FAE82" opacity="0.4"/><rect x="180" y="88" width="76" height="26" fill="#5FAE82" opacity="0.5"/>
+            <rect x="260" y="88" width="76" height="26" fill="#33425a" opacity="0.6"/><rect x="340" y="88" width="76" height="26" fill="#33425a" opacity="0.6"/><rect x="420" y="88" width="76" height="26" fill="#33425a" opacity="0.6"/>
+
+            <rect x="100" y="118" width="76" height="26" fill="#5FAE82" opacity="0.3"/><rect x="180" y="118" width="76" height="26" fill="#5FAE82" opacity="0.35"/><rect x="260" y="118" width="76" height="26" fill="#5FAE82" opacity="0.5"/>
+            <rect x="340" y="118" width="76" height="26" fill="#33425a" opacity="0.6"/><rect x="420" y="118" width="76" height="26" fill="#33425a" opacity="0.6"/>
+
+            <rect x="100" y="148" width="76" height="26" fill="#5FAE82" opacity="0.25"/><rect x="180" y="148" width="76" height="26" fill="#5FAE82" opacity="0.3"/><rect x="260" y="148" width="76" height="26" fill="#5FAE82" opacity="0.35"/><rect x="340" y="148" width="76" height="26" fill="#5FAE82" opacity="0.5"/>
+            <rect x="420" y="148" width="76" height="26" fill="#33425a" opacity="0.6"/>
+
+            <rect x="100" y="176" width="76" height="12" fill="#5FAE82" opacity="0.2"/><rect x="180" y="176" width="76" height="12" fill="#5FAE82" opacity="0.25"/><rect x="260" y="176" width="76" height="12" fill="#5FAE82" opacity="0.3"/><rect x="340" y="176" width="76" height="12" fill="#5FAE82" opacity="0.35"/><rect x="420" y="176" width="76" height="12" fill="#5FAE82" opacity="0.45"/>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 6 — the masking pattern. Green cells are allowed attention (past + present); grey cells are masked to −∞ and vanish after softmax. Each row can only see itself and everything to its left.</figcaption>
+    </figure>
+
+    <p>Why does this matter so much? At training time, the whole target sentence is fed in at once for efficiency — but if position 3 could see positions 4 and 5, the model would just be copying the answer instead of learning to predict it. Masking is what keeps training honest and keeps it consistent with how the model will actually be used at inference, generating one real word at a time with no future to peek at.</p>
+  </div>
+</section>
+
+<!-- ================= 12. CROSS-ATTENTION ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">12 · The Bridge Between The Two Halves</div>
+    <h2 class="title">Cross-attention — encoder meets decoder</h2>
+    <p class="lede">This is the single most distinctive block in the whole architecture, and the one that actually connects "understanding the input" to "generating the output."</p>
+
+    <p>In encoder-decoder attention layers, queries come from the previous decoder layer, while the keys and values come from the output of the encoder — letting every position in the decoder attend over every position in the input sequence.</p>
+
+    <div class="def">
+      <span class="term">Cross-attention — who provides what</span>
+      <strong>Query</strong> → from the decoder (asking "what should I focus on right now?"). <strong>Key</strong> and <strong>Value</strong> → both from the final encoder output. Same formula, \(\text{softmax}(QK^T/\sqrt{d_k})V\) — just sourced from two different places at once.
+    </div>
+
+    <p>This is exactly how the decoder "reads" the source sentence while writing the translation: at every generation step, it re-asks the encoder's fixed representation which parts of the input are relevant to the word it's about to produce next.</p>
+  </div>
+</section>
+
+<!-- ================= 13. FINAL LINEAR + SOFTMAX ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">13 · Turning A Vector Back Into A Word</div>
+    <h2 class="title">The final linear layer, softmax, and decoding</h2>
+    <p class="lede">After all six decoder blocks, we're left holding a 512-dimensional vector. Somehow that has to become an actual word from the vocabulary.</p>
+
+    <p>A <strong>Linear</strong> layer projects that vector up into a much larger "logits" vector — one score per word in the entire output vocabulary (say, 30,000 words). <strong>Softmax</strong> then converts those raw scores into probabilities that sum to 1:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ P(\text{next word}) = \text{softmax}(\text{Linear}(D_{last})) \]
+    </div>
+
+    <p>The simplest way to pick a word is <strong>greedy decoding</strong>: just take the highest-probability word every time. The paper instead uses beam search with a beam size of 4 and a length penalty of 0.6, keeping a handful of the most promising candidate sequences alive at each step rather than committing to one guess too early — a small hedge that measurably improves translation quality over pure greedy decoding.</p>
+
+    <p>Whichever word gets chosen is appended to the decoder's own input, and the entire decoder stack runs again to produce the next word. This repeats until the model emits a special <span class="mono">&lt;eos&gt;</span> token, at which point generation stops.</p>
+  </div>
+</section>
+
+<!-- ================= 14. TRAINING + LOSS ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">14 · How It's Actually Trained</div>
+    <h2 class="title">Loss function and the training recap</h2>
+    <p class="lede">Every forward pass above is identical whether the model is trained or fully finished. What changes during training is that we now have a correct answer to compare against.</p>
+
+    <p>Each target word is represented as a one-hot vector — 1.0 at the correct word's index, 0.0 everywhere else. The untrained model's softmax output starts out close to uniform nonsense across the whole vocabulary; training is the process of nudging that distribution, one gradient step at a time, until it sharpens toward the correct word at every position.</p>
+
+    <p>The optimizer is Adam, with \(\beta_1 = 0.9\), \(\beta_2 = 0.98\), \(\epsilon = 10^{-9}\), and a learning rate that increases linearly for the first \(\text{warmup\_steps} = 4000\) steps, then decays proportionally to the inverse square root of the step number thereafter. Two regularizers matter in practice: residual dropout applied to the output of every sub-layer at a rate of 0.1, and label smoothing of value 0.1 — which deliberately never lets the model become 100% confident in any single answer, hurting raw perplexity slightly but improving both accuracy and BLEU.</p>
+  </div>
+</section>
+
+<!-- ================= 15. WHY SELF-ATTENTION WINS ================= -->
+<section class="dark">
+  <div class="wrap-wide">
+    <div class="kicker">15 · Why Ditch RNNs And CNNs At All</div>
+    <h2 class="title">The complexity argument, not just the BLEU score</h2>
+    <p class="lede">The paper's justification for self-attention isn't just "it scored higher" — it's a structural argument about how information travels through the network.</p>
+
+    <p>Three things matter when comparing layer types: computation per layer, how much of that computation can run in parallel, and — the one that really decides whether long-range dependencies are learnable at all — the maximum path length a signal must travel between any two positions.</p>
+
+    <table>
+      <tr><th>Layer type</th><th>Complexity / layer</th><th>Sequential ops</th><th>Max path length</th></tr>
+      <tr><td>Self-Attention</td><td class="mono">O(n²·d)</td><td class="mono">O(1)</td><td class="mono">O(1)</td></tr>
+      <tr><td>Recurrent</td><td class="mono">O(n·d²)</td><td class="mono">O(n)</td><td class="mono">O(n)</td></tr>
+      <tr><td>Convolutional</td><td class="mono">O(k·n·d²)</td><td class="mono">O(1)</td><td class="mono">O(log_k(n))</td></tr>
+    </table>
+    <p>A self-attention layer connects all positions with a constant number of sequential operations, whereas a recurrent layer requires O(n) sequential operations — and self-attention layers are faster than recurrent ones whenever sequence length n is smaller than representation dimension d, which is the common case for the word-piece and byte-pair representations used in state-of-the-art translation. A recurrent network has to pass information step by step through n hidden states to connect word 1 to word n; self-attention connects them directly, in one hop, regardless of how far apart they are.</p>
+
+    <div class="aside">
+      <span class="term">The trade being made</span>
+      This constant path length does come "at the cost of reduced effective resolution due to averaging attention-weighted positions" — an effect the paper counteracts specifically with multi-head attention rather than a single attention function. That's the real reason multi-head attention exists, beyond just "it works better empirically."
+    </div>
+  </div>
+</section>
+
+<!-- ================= 16. HYPERPARAMETERS + CHEAT SHEET ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">16 · For When You Just Need The Short Version</div>
+    <h2 class="title">Hyperparameters and the cheat sheet</h2>
+
+    <table>
+      <tr><th>Parameter</th><th>Value</th><th>Meaning</th></tr>
+      <tr><td>d_model</td><td class="mono">512</td><td>dimension of every embedding and sub-layer output</td></tr>
+      <tr><td>N</td><td class="mono">6</td><td>number of encoder blocks = number of decoder blocks</td></tr>
+      <tr><td>h (heads)</td><td class="mono">8</td><td>parallel attention heads</td></tr>
+      <tr><td>d_k = d_v</td><td class="mono">64</td><td>dimension of each Q/K/V vector per head (512/8)</td></tr>
+      <tr><td>d_ff</td><td class="mono">2048</td><td>inner dimension of the feed-forward network</td></tr>
+      <tr><td>Dropout</td><td class="mono">0.1</td><td>regularization rate applied throughout</td></tr>
+    </table>
+
+    <h3 class="sub-title">If you forget everything else, remember this</h3>
+    <ul class="clean">
+      <li><strong>Embedding + positional encoding</strong> turns words into position-aware vectors.</li>
+      <li><strong>Q, K, V</strong> let every token ask "what's relevant to me?" and answer for others.</li>
+      <li><strong>Scaled dot-product attention</strong> scores, scales by √d_k, softmaxes, and weights the Values.</li>
+      <li><strong>Multi-head attention</strong> runs that eight times in parallel, then recombines with W^O.</li>
+      <li><strong>Add & Norm</strong> wraps every sub-layer, everywhere, in both encoder and decoder.</li>
+      <li><strong>The FFN</strong> processes each position independently — no cross-token interaction here.</li>
+      <li><strong>Masked attention</strong> keeps the decoder from cheating by looking at future tokens.</li>
+      <li><strong>Cross-attention</strong> is the only place decoder queries meet encoder keys and values.</li>
+      <li>Repeat the encoder stack once per sentence, and the decoder stack once per output word, until <span class="mono">&lt;eos&gt;</span>.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= FOOTER ================= -->
+<footer>
+  <div class="wrap">
+    <hr class="thin">
+    <p style="color:#C9CDD6; font-size:15.5px;">Built from <strong>"Attention Is All You Need"</strong> (Vaswani et al., 2017), Jay Alammar's <strong>The Illustrated Transformer</strong>, the relevant <strong>3Blue1Brown</strong> transformer/attention material, and my own class notes and hand-drawn diagram — reorganized, worked through by hand, and written out in my own words so it actually sticks.</p>
+    <p>If you want to go further, Jay Alammar's post links out to the Tensor2Tensor codebase and an interactive notebook where you can load a trained Transformer and inspect real attention weights, layer by layer, head by head.</p>
+    <div class="seriesnav">
+      <a href="#">Attention Is All You Need — Vaswani et al., 2017</a>
+      <a href="#">Jay Alammar — The Illustrated Transformer</a>
+      <a href="#">3Blue1Brown — Attention / Transformer visual intuition</a>
+      <a href="#">My class notes — Encoder to Decoder, step by step</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
