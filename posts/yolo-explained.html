@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YOLO — You Only Look Once, Explained From v1 to v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js"></script>
+<style>
+  :root{
+    --ink:#1B1F27;
+    --paper:#F6F3EC;
+    --paper-dim:#ECE7DA;
+    --dark:#11141B;
+    --dark-2:#181C26;
+    --amber:#FFB454;
+    --amber-soft:#FFD9A0;
+    --wire-cool:#5C7A99;
+    --wire-cool-dim:#33425a;
+    --muted:#8B92A1;
+    --muted-dark:#6b7280;
+    --red:#E7714F;
+    --green:#5FAE82;
+    --rule: rgba(255,255,255,0.08);
+    --rule-dark: rgba(20,20,20,0.10);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    font-size:17px;
+    line-height:1.72;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:600;
+    letter-spacing:-0.01em;
+    margin:0;
+  }
+  .mono{font-family:'JetBrains Mono',monospace;}
+  a{color:inherit;}
+  p{margin:0 0 1.15em 0;}
+  .wrap{max-width:760px; margin:0 auto; padding:0 28px;}
+  .wrap-wide{max-width:920px; margin:0 auto; padding:0 28px;}
+
+  /* ===== HERO ===== */
+  .hero{
+    background:radial-gradient(ellipse 900px 500px at 50% -10%, #1d2433 0%, var(--dark) 60%);
+    color:var(--paper);
+    padding:104px 0 84px;
+    position:relative;
+    overflow:hidden;
+  }
+  .hero .eyebrow{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--amber);
+    margin-bottom:22px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--amber); box-shadow:0 0 8px 2px var(--amber);}
+  .hero h1{
+    font-size:50px;
+    line-height:1.1;
+    color:#F4F1E8;
+    max-width:680px;
+  }
+  .hero h1 em{ font-style:normal; color:var(--amber); }
+  .hero .sub{
+    margin-top:24px;
+    font-size:18.5px;
+    color:#B9BFCC;
+    max-width:560px;
+  }
+  @media (max-width:640px){ .hero{padding:80px 0 60px;} .hero h1{font-size:34px;} }
+
+  section{padding:80px 0;}
+  section.dark{background:var(--dark); color:#E7E5DC;}
+  section.dark h2, section.dark h3{color:#F4F1E8;}
+  section.paper{background:var(--paper);}
+  section.paper-dim{background:var(--paper-dim);}
+  .kicker{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    letter-spacing:0.13em;
+    text-transform:uppercase;
+    color:var(--amber);
+  }
+  section.paper .kicker, section.paper-dim .kicker{ color:#B5662E; }
+  h2.title{font-size:33px; margin-top:10px; margin-bottom:26px;}
+  h3.sub-title{font-size:21px; margin-top:42px; margin-bottom:14px;}
+  .lede{font-size:19px; color:var(--muted-dark); max-width:620px;}
+  section.dark .lede{color:var(--muted);}
+
+  figure{margin:32px 0;}
+  figure svg{width:100%; height:auto; display:block;}
+  figure img{width:100%; height:auto; display:block; border-radius:8px;}
+  figcaption{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+    color:var(--muted-dark);
+    margin-top:12px;
+    padding-top:10px;
+    border-top:1px solid var(--rule-dark);
+  }
+  section.dark figcaption{color:var(--muted); border-top:1px solid var(--rule);}
+  .fig-card{ background:var(--dark); border-radius:14px; padding:30px 26px 18px; }
+  section.dark .fig-card{ background:#0B0D12; border:1px solid var(--rule); }
+  .fig-card.light{ background:#fff; border:1px solid #E3DECE; }
+  .fig-card.light figcaption{color:var(--muted-dark); border-top:1px solid #ECE6D6;}
+
+  .def{
+    border-left:3px solid var(--amber);
+    background:rgba(255,180,84,0.07);
+    padding:16px 20px;
+    border-radius:0 8px 8px 0;
+    margin:24px 0;
+  }
+  .def .term{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+    color:#B5662E; display:block; margin-bottom:6px;
+  }
+  section.dark .def{background:rgba(255,180,84,0.10);}
+  section.dark .def .term{color:var(--amber);}
+
+  .aside{
+    border-left:3px solid var(--wire-cool);
+    background:rgba(92,122,153,0.07);
+    padding:16px 20px;
+    border-radius:0 8px 8px 0;
+    margin:24px 0;
+    font-size:15.5px;
+  }
+  .aside .term{
+    font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:0.08em; text-transform:uppercase;
+    color:#3d5670; display:block; margin-bottom:6px;
+  }
+  section.dark .aside{background:rgba(92,122,153,0.12);}
+  section.dark .aside .term{color:#9db7cf;}
+
+  .math-box{
+    background:#fff; border:1px solid #E3DECE; border-radius:10px;
+    padding:20px 24px; margin:22px 0; overflow-x:auto;
+  }
+  section.dark .math-box{background:#0B0D12; border-color:var(--rule);}
+
+  table{width:100%; border-collapse:collapse; margin:26px 0; font-size:15.5px;}
+  th,td{padding:12px 14px; text-align:left; border-bottom:1px solid var(--rule-dark);}
+  section.dark th, section.dark td{border-bottom:1px solid var(--rule);}
+  th{font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:0.07em; text-transform:uppercase; color:var(--muted-dark);}
+  section.dark th{color:var(--muted);}
+  td .mono{color:var(--amber);}
+  section.paper td .mono, section.paper-dim td .mono{color:#B5662E;}
+  .nudge-table{font-family:'JetBrains Mono',monospace; font-size:13.5px;}
+  .nudge-table td{text-align:center;}
+  .nudge-table th{text-align:center;}
+  .nudge-pos{color:#3d5670;}
+  .nudge-neg{color:#B5662E;}
+
+  .seriesnav{display:flex; flex-wrap:wrap; gap:10px; margin-top:34px;}
+  .seriesnav a{
+    font-family:'JetBrains Mono',monospace; font-size:12.5px; padding:8px 14px;
+    border:1px solid var(--rule); border-radius:999px; text-decoration:none;
+    color:#C9CDD6; transition:border-color .2s, color .2s;
+  }
+  .seriesnav a:hover{border-color:var(--amber); color:var(--amber);}
+
+  footer{ background:var(--dark); color:var(--muted); padding:60px 0 50px; font-size:14.5px; }
+  footer a{color:var(--amber); text-decoration:none; border-bottom:1px solid rgba(255,180,84,0.3);}
+  hr.thin{border:none; border-top:1px solid var(--rule); margin:30px 0;}
+
+  ul.clean{padding-left:0; list-style:none; margin:18px 0;}
+  ul.clean li{padding-left:22px; position:relative; margin-bottom:10px;}
+  ul.clean li::before{
+    content:""; position:absolute; left:0; top:9px;
+    width:7px; height:7px; border-radius:50%;
+    background:var(--amber); box-shadow:0 0 6px 1px rgba(255,180,84,0.6);
+  }
+  ol.steps{padding-left:22px; margin:18px 0;}
+  ol.steps li{margin-bottom:8px;}
+
+  .twocol{display:grid; grid-template-columns:1fr 1fr; gap:22px;}
+  @media (max-width:680px){.twocol{grid-template-columns:1fr;}}
+  .threecol{display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px;}
+  @media (max-width:780px){.threecol{grid-template-columns:1fr;}}
+
+  .pulse{ animation: pulseGlow 2.6s ease-in-out infinite; }
+  @keyframes pulseGlow{ 0%,100%{ opacity:0.55; } 50%{ opacity:1; } }
+  @media (prefers-reduced-motion: reduce){ .pulse{animation:none;} }
+</style>
+</head>
+<body>
+
+<!-- ================= HERO ================= -->
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow"><span class="dot pulse"></span>MY NOTES ON YOLO — v1 THROUGH v3</div>
+    <h1>Every earlier detector looked at an image hundreds of times. YOLO looks <em>once</em> — and that one decision changed everything.</h1>
+    <p class="sub">I went through Redmon et al.'s original "You Only Look Once" paper, worked through my own class notes on the grid math and loss function line by line, and rebuilt the whole v1 → v2 → v3 story from a set of teaching notes that walked me through why each version exists. This is that, written the way I actually want to remember it.</p>
+
+    <figure style="margin-top:48px;">
+      <div class="fig-card" style="background:#0B0D12; border:1px solid var(--rule);">
+        <svg viewBox="0 0 640 190" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="12" text-anchor="middle">
+            <text x="80" y="24" fill="#5FAE82" font-size="11">1. IMAGE</text>
+            <rect x="20" y="34" width="120" height="90" rx="8" fill="none" stroke="#5FAE82" stroke-width="1.4"/>
+            <text x="80" y="84" fill="#E7E5DC" font-size="11">horse + rider</text>
+
+            <path d="M 145 79 L 195 79" stroke="#FFB454" stroke-width="1.6" fill="none" marker-end="url(#h1)"/>
+            <defs><marker id="h1" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#FFB454"/></marker></defs>
+
+            <text x="280" y="24" fill="#FFB454" font-size="11">2. SINGLE CNN</text>
+            <rect x="200" y="34" width="160" height="90" rx="10" fill="#181C26" stroke="#FFB454" stroke-width="1.6"/>
+            <text x="280" y="84" fill="#FFB454" font-size="13" font-weight="600">ONE PASS</text>
+
+            <path d="M 365 79 L 415 79" stroke="#E7714F" stroke-width="1.6" fill="none" marker-end="url(#h2)"/>
+            <defs><marker id="h2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#E7714F"/></marker></defs>
+
+            <text x="500" y="24" fill="#E7714F" font-size="11">3. DETECTIONS</text>
+            <rect x="420" y="34" width="200" height="90" rx="8" fill="none" stroke="#E7714F" stroke-width="1.4"/>
+            <rect x="435" y="50" width="60" height="60" fill="none" stroke="#5C7A99" stroke-width="1.4"/>
+            <text x="465" y="46" fill="#5C7A99" font-size="9">person</text>
+            <rect x="500" y="55" width="105" height="55" fill="none" stroke="#FFD9A0" stroke-width="1.4"/>
+            <text x="552" y="46" fill="#FFD9A0" font-size="9">horse</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 0 — the entire YOLO pipeline: resize the image, run one convolutional network once, threshold the boxes it directly outputs. No second pass, no separate classifier stage.</figcaption>
+    </figure>
+  </div>
+</header>
+
+<!-- ================= 01. WHY PLAIN CNN FAILS ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">01 · The Problem Before The Solution</div>
+    <h2 class="title">Why a normal CNN can't do detection</h2>
+    <p class="lede">A plain image-classification CNN answers exactly one question: "what is the main thing in this image?" Feed it a photo, get back one label. That's it.</p>
+
+    <p>This works when there's one object, roughly centered, and you don't care where it is — just what it is. Real-world images break all three assumptions at once. There can be several objects in one frame, they can sit anywhere at any size, and for the applications that actually matter — self-driving cars, security cameras, robotics — knowing <em>where</em> something is matters as much as knowing <em>what</em> it is.</p>
+
+    <div class="def">
+      <span class="term">The core limitation</span>
+      A classification-only CNN has no mechanism to output position, and no mechanism to output multiple things at once. It can tell you "dog," never "dog, right here, and a person over there too."
+    </div>
+
+    <p>The first fix people tried was the <strong>sliding window</strong> approach: run the classifier over hundreds of little patches cut from the full image. That evolved into smarter two-stage pipelines — the R-CNN family — which first propose regions likely to contain an object, then classify each region separately. Both approaches share the same fatal cost: the CNN runs hundreds or thousands of times per image. Accurate, but nowhere close to real time.</p>
+  </div>
+</section>
+
+<!-- ================= 02. THE CORE IDEA ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">02 · You Only Look Once</div>
+    <h2 class="title">Detection reframed as one regression problem</h2>
+    <p class="lede">YOLO's entire idea fits in one sentence: instead of looking at the image hundreds of times, look at it once.</p>
+
+    <p>Pass the whole image through a single CNN, one time, and have the network directly output what objects are present, where they are, and it does this for every object at once — all in one forward pass. Detection stops being "classify this crop, then that crop, then that crop" and becomes one big regression problem: the network directly predicts numbers — box coordinates and class probabilities — instead of running classification thousands of times over different crops.</p>
+
+    <div class="aside">
+      <span class="term">Why "real-time" actually means something here</span>
+      Because there's only one network evaluation per image, YOLO's base model runs at 45 frames per second on a Titan X GPU, and a smaller "Fast YOLO" variant pushes past 150 FPS — under 25 milliseconds of latency per frame. That's fast enough to process a live video stream, not just a folder of photos.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 03. THE GRID SYSTEM ================= -->
+<section class="dark">
+  <div class="wrap-wide">
+    <div class="kicker">03 · Splitting The Image Into Responsibility Zones</div>
+    <h2 class="title">The S×S grid, and who's responsible for what</h2>
+    <p class="lede">YOLO divides the input image into an S×S grid. The rule that makes everything else work: if the center of an object falls into a grid cell, that cell — and only that cell — is responsible for detecting it.</p>
+
+    <p>For PASCAL VOC, the paper uses \(S = 7\), giving a 7×7 grid over a 448×448 input image — so each cell covers a 64×64 pixel patch. Each grid cell predicts <strong>B</strong> bounding boxes (B = 2 in the original paper) plus a confidence score for each box, and one set of class probabilities per cell — shared across whichever boxes that cell predicts.</p>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 620 280" xmlns="http://www.w3.org/2000/svg">
+          <g stroke="#33425a" stroke-width="1">
+            <line x1="80" y1="20" x2="80" y2="260"/><line x1="140" y1="20" x2="140" y2="260"/><line x1="200" y1="20" x2="200" y2="260"/>
+            <line x1="260" y1="20" x2="260" y2="260"/><line x1="320" y1="20" x2="320" y2="260"/><line x1="380" y1="20" x2="380" y2="260"/>
+            <line x1="20" y1="20" x2="440" y2="20"/><line x1="20" y1="80" x2="440" y2="80"/><line x1="20" y1="140" x2="440" y2="140"/>
+            <line x1="20" y1="200" x2="440" y2="200"/><line x1="20" y1="260" x2="440" y2="260"/>
+          </g>
+          <rect x="20" y="20" width="420" height="240" fill="none" stroke="#8B92A1" stroke-width="1.4"/>
+          <rect x="200" y="140" width="60" height="60" fill="#FFB454" opacity="0.28"/>
+          <circle cx="230" cy="170" r="5" fill="#FFB454"/>
+          <g font-family="JetBrains Mono" font-size="12">
+            <rect x="470" y="70" width="120" height="150" fill="none" stroke="#5FAE82" stroke-width="1.4" rx="8"/>
+            <text x="530" y="90" fill="#5FAE82" text-anchor="middle" font-size="11">rider</text>
+            <rect x="150" y="60" width="260" height="150" fill="none" stroke="#5C7A99" stroke-width="1.4" rx="8"/>
+            <text x="280" y="230" fill="#5C7A99" text-anchor="middle" font-size="11">horse (object)</text>
+          </g>
+          <text x="230" y="20" fill="#FFB454" font-size="11" font-family="JetBrains Mono" text-anchor="middle">center falls here → this cell owns it</text>
+        </svg>
+      </div>
+      <figcaption>FIG 1 — a 7×7 grid over the input. The amber cell is "responsible" because the object's center point lands inside it — regardless of how much of the object spills into neighboring cells.</figcaption>
+    </figure>
+
+    <div class="def">
+      <span class="term">Why B = 2 matters at training time</span>
+      Each grid cell predicts two candidate boxes, but only one predictor is "responsible" per object — whichever of the two currently has the highest IOU with the ground truth. This forces specialization: over training, each predictor gets better at particular sizes or aspect ratios, which improves overall recall.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 04. BOUNDING BOX MATH ================= -->
+<section class="paper">
+  <div class="wrap-wide">
+    <div class="kicker">04 · The Coordinate Math, Worked By Hand</div>
+    <h2 class="title">How a bounding box actually gets parameterized</h2>
+    <p class="lede">This is the part that looks fussy on paper but is genuinely simple once you plug in real numbers — exactly the way my class notes walk through it.</p>
+
+    <p>Each bounding box is 5 numbers: \(x, y, w, h\), and confidence. The center coordinates \((x,y)\) are <strong>offsets relative to the grid cell</strong> that owns the box — not the whole image — so they're bounded between 0 and 1. Width and height, \(w\) and \(h\), are predicted relative to the <em>whole image</em>, also bounded 0–1.</p>
+
+    <p>Take a concrete example: a 448×448 image, \(S=7\) so each cell is 64×64 pixels, and an object whose bounding box runs from top-left corner \((192, 256)\) to bottom-right corner \((200, 311)\)... actually the box center is what falls at \((200, 311)\) inside the cell whose own top-left corner sits at \((x_a, y_a)\). The offset math:</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ \Delta x = \dfrac{x - x_a}{64} \qquad \Delta y = \dfrac{y - y_a}{64} \qquad \Delta w = \dfrac{w}{448} \qquad \Delta h = \dfrac{h}{448} \]
+    </div>
+
+    <table class="nudge-table">
+      <tr><th>Quantity</th><th>Value</th></tr>
+      <tr><td>Δx = (200 − 192) / 64</td><td class="nudge-pos">≈ 0.13</td></tr>
+      <tr><td>Δy = (311 − 256) / 64</td><td class="nudge-pos">≈ 0.87</td></tr>
+    </table>
+
+    <p>Every prediction is normalized this way for the same reason positional encoding gets normalized elsewhere: it keeps every number in a consistent, learnable range no matter where in the image or how large the object is.</p>
+
+    <figure>
+      <div class="fig-card light">
+        <svg viewBox="0 0 500 260" xmlns="http://www.w3.org/2000/svg">
+          <g stroke="#E3DECE" stroke-width="1">
+            <line x1="60" y1="20" x2="60" y2="240"/><line x1="130" y1="20" x2="130" y2="240"/><line x1="200" y1="20" x2="200" y2="240"/>
+            <line x1="270" y1="20" x2="270" y2="240"/><line x1="340" y1="20" x2="340" y2="240"/><line x1="410" y1="20" x2="410" y2="240"/>
+            <line x1="60" y1="90" x2="440" y2="90"/><line x1="60" y1="160" x2="440" y2="160"/>
+          </g>
+          <rect x="60" y="20" width="380" height="220" fill="none" stroke="#8B92A1"/>
+          <rect x="130" y="90" width="70" height="70" fill="#FFD9A0" opacity="0.35" stroke="#B5662E"/>
+          <text x="120" y="83" fill="#B5662E" font-family="JetBrains Mono" font-size="11">(xₐ, yₐ)</text>
+          <circle cx="167" cy="130" r="4" fill="#B5662E"/>
+          <line x1="130" y1="90" x2="167" y2="130" stroke="#B5662E" stroke-dasharray="3,2"/>
+          <text x="190" y="125" fill="#1B1F27" font-family="JetBrains Mono" font-size="11">(x, y)</text>
+        </svg>
+      </div>
+      <figcaption>FIG 2 — a bounding box center living inside its owning grid cell. Δx and Δy measure the offset from the cell's own top-left corner, scaled by the cell size (64 px).</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ================= 05. OUTPUT TENSOR ================= -->
+<section class="paper-dim">
+  <div class="wrap-wide">
+    <div class="kicker">05 · Everything The Network Outputs, In One Tensor</div>
+    <h2 class="title">The 7×7×30 prediction tensor</h2>
+    <p class="lede">Here's where all the pieces above get packed into one single output the network produces in a single forward pass.</p>
+
+    <p>Per grid cell, the model predicts: 2 bounding boxes × 5 values each (\(x, y, w, h,\) confidence), plus \(C = 20\) class probabilities shared across the cell. That's \(2 \times 5 + 20 = 30\) numbers per cell, and \(7 \times 7 = 49\) cells — giving a final output tensor of shape:</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ S \times S \times (B \times 5 + C) = 7 \times 7 \times 30 \]
+    </div>
+
+    <table>
+      <tr><th>Index range</th><th>Content</th></tr>
+      <tr><td class="mono">1st–5th</td><td>Box #1 → x, y, w, h, confidence</td></tr>
+      <tr><td class="mono">6th–10th</td><td>Box #2 → x, y, w, h, confidence</td></tr>
+      <tr><td class="mono">11th–30th</td><td>20 conditional class probabilities, Pr(Class<sub>i</sub> | Object)</td></tr>
+    </table>
+
+    <p>One subtlety worth sitting with: <strong>class probabilities are conditioned on an object being present</strong> — \(Pr(\text{Class}_i \mid \text{Object})\), not \(Pr(\text{Class}_i)\) outright. They only mean anything once you know something is actually there. If no object's center falls in a cell, every one of that cell's 30 values should be driven toward zero — which is exactly the "no object → all zeros" label encoding used during training.</p>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 700 170" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="11.5" text-anchor="middle">
+            <rect x="10" y="20" width="220" height="120" fill="none" stroke="#5C7A99" stroke-width="1.4"/>
+            <text x="120" y="45" fill="#5C7A99">Box #1</text>
+            <text x="120" y="70" fill="#E7E5DC">x, y, w, h, conf</text>
+            <text x="120" y="95" fill="#8B92A1">(5 values)</text>
+
+            <rect x="240" y="20" width="220" height="120" fill="none" stroke="#E7714F" stroke-width="1.4"/>
+            <text x="350" y="45" fill="#E7714F">Box #2</text>
+            <text x="350" y="70" fill="#E7E5DC">x, y, w, h, conf</text>
+            <text x="350" y="95" fill="#8B92A1">(5 values)</text>
+
+            <rect x="470" y="20" width="220" height="120" fill="none" stroke="#FFB454" stroke-width="1.4"/>
+            <text x="580" y="45" fill="#FFB454">Class probs</text>
+            <text x="580" y="70" fill="#E7E5DC">P(c₁) … P(c₂₀)</text>
+            <text x="580" y="95" fill="#8B92A1">(20 values)</text>
+          </g>
+          <text x="350" y="160" fill="#8B92A1" font-family="JetBrains Mono" font-size="11" text-anchor="middle">= 30 numbers per grid cell, × 49 cells = full 7×7×30 output</text>
+        </svg>
+      </div>
+      <figcaption>FIG 3 — one grid cell's full prediction vector: two candidate boxes plus one shared set of class probabilities.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ================= 06. CONFIDENCE ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">06 · How Confident Is The Model, Really</div>
+    <h2 class="title">Confidence score and class-specific confidence</h2>
+    <p class="lede">Confidence isn't just "how sure am I an object is here" — it's defined precisely as a product of two things.</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ \text{confidence} = Pr(\text{Object}) \times IOU^{\text{truth}}_{\text{pred}} \]
+    </div>
+    <p>If no object exists in that cell, confidence should be exactly zero. Otherwise, it should equal the IOU (intersection-over-union) between the predicted box and the actual ground-truth box — so confidence reflects both "is something here" and "how well does my box actually fit it."</p>
+
+    <p>At test time, this confidence gets multiplied against the cell's conditional class probability to produce one final, class-specific score per box:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ Pr(\text{Class}_i \mid \text{Object}) \times Pr(\text{Object}) \times IOU^{\text{truth}}_{\text{pred}} = Pr(\text{Class}_i) \times IOU^{\text{truth}}_{\text{pred}} \]
+    </div>
+    <p>That single number encodes everything you need to threshold on: how likely this box contains that specific class, <em>and</em> how tightly the box fits.</p>
+  </div>
+</section>
+
+<!-- ================= 07. ARCHITECTURE ================= -->
+<section class="paper">
+  <div class="wrap-wide">
+    <div class="kicker">07 · The Network Itself</div>
+    <h2 class="title">24 conv layers, 2 FC layers, one tensor out</h2>
+    <p class="lede">YOLOv1's architecture is inspired by GoogLeNet, but simplified: instead of inception modules, it alternates 1×1 reduction layers with 3×3 convolutions to cut computation before the expensive layers.</p>
+
+    <table>
+      <tr><th>Stage</th><th>Layers</th><th>Output</th></tr>
+      <tr><td>Stem</td><td class="mono">7×7×64-s2 conv → maxpool</td><td class="mono">112×112×64</td></tr>
+      <tr><td>Block 2</td><td class="mono">3×3×192 conv → maxpool</td><td class="mono">56×56×192</td></tr>
+      <tr><td>Block 3</td><td class="mono">1×1/3×3 reduction pairs → maxpool</td><td class="mono">28×28×512</td></tr>
+      <tr><td>Block 4 (×4)</td><td class="mono">1×1/3×3 pairs → maxpool</td><td class="mono">14×14×1024</td></tr>
+      <tr><td>Block 5 (×2 + stride-2)</td><td class="mono">3×3×1024 convs</td><td class="mono">7×7×1024</td></tr>
+      <tr><td>Head</td><td class="mono">flatten → FC 4096 → FC 1470 → reshape</td><td class="mono">7×7×30</td></tr>
+    </table>
+
+    <p>Notice the last step: the final conv feature map is 7×7×1024 = <strong>50,176</strong> values. That gets flattened, passed through a fully connected layer down to 4096, then another FC layer up to <strong>1470</strong> values — and 1470 reshapes exactly into \(7 \times 7 \times 30\). Those two FC layers are the part that later gets torn out entirely in YOLOv2, for reasons we'll get to.</p>
+
+    <div class="def">
+      <span class="term">Leaky ReLU, and why "leaky"</span>
+      Every layer except the final one uses leaky rectified linear activation: \(\phi(x) = x\) if \(x>0\), else \(0.1x\). Regular ReLU zeroes out anything negative entirely; the small 0.1 slope keeps a trickle of gradient flowing even for negative activations, which helps avoid dead neurons during training.
+    </div>
+
+    <p>Training happens in two stages: the first 20 convolutional layers are pretrained on ImageNet classification at 224×224 (reaching 88% top-5 accuracy — comparable to GoogLeNet). Then four new conv layers and two FC layers, randomly initialized, get added on top, and the input resolution doubles to 448×448 for the actual detection training — because detection needs the fine-grained visual detail that a smaller image throws away.</p>
+
+    <p>Fast YOLO is the same recipe with a smaller network: 9 convolutional layers instead of 24, and fewer filters per layer. Every training and testing parameter otherwise stays identical.</p>
+  </div>
+</section>
+
+<!-- ================= 08. LOSS FUNCTION ================= -->
+<section class="paper-dim">
+  <div class="wrap-wide">
+    <div class="kicker">08 · How Training Actually Grades A Prediction</div>
+    <h2 class="title">The multi-part loss function, piece by piece</h2>
+    <p class="lede">YOLO optimizes a single sum-squared error loss — but it's really four different losses stitched together, each weighted differently on purpose.</p>
+
+    <p>Two problems with plain sum-squared error had to be fixed. First: in any image, most grid cells contain no object at all, so their confidence targets are zero — and that overwhelming majority of "no object" gradient can drown out the signal from the few cells that actually matter. Second: sum-squared error treats a small coordinate error the same whether the box is tiny or huge, but a small deviation matters far more, proportionally, for a small box than a large one.</p>
+
+    <h3 class="sub-title">Fix 1 — reweight object vs. no-object cells</h3>
+    <p>Two constants control this: \(\lambda_{coord} = 5\) (boost the weight on box-coordinate errors) and \(\lambda_{noobj} = 0.5\) (shrink the weight on confidence errors from empty cells).</p>
+
+    <h3 class="sub-title">Fix 2 — predict square roots of width and height</h3>
+    <p>Instead of penalizing \(w\) and \(h\) directly, the loss penalizes \(\sqrt{w}\) and \(\sqrt{h}\). A fixed absolute error in the square-root space corresponds to a smaller relative error for large boxes and a larger relative error for small boxes — which is exactly the behavior we want, since a few pixels off matters much more for a small object than a large one.</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ L^{box}_{i,obj} = (\Delta x^* - \Delta \hat{x})^2 + (\Delta y^* - \Delta \hat{y})^2 + \left(\sqrt{\Delta w^*} - \sqrt{\Delta \hat{w}}\right)^2 + \left(\sqrt{\Delta h^*} - \sqrt{\Delta \hat{h}}\right)^2 \]
+    </div>
+
+    <p>Alongside the box loss sit a confidence loss and a classification loss, each contributing their own term, only for cells that actually contain an object:</p>
+    <div class="math-box">
+      \[ L^{conf}_{i,obj} = (c^*_i - \hat{c}_i)^2 \qquad L^{cls}_{i,obj} = \sum_{c=1}^{20} (p_{i,c} - \hat{p}_{i,c})^2 \]
+    </div>
+
+    <p>Worked with real numbers from a single object cell: say the ground-truth confidence is 1.0 and the network currently predicts 0.9 — that's a confidence loss of \((0.9-1.0)^2 = 0.01\). For the 20-way class vector, if the true class is "person" (index 14, target 1.0) and everything else is 0, but the network currently outputs 0.1 for one wrong class and 0.8 for "person": the classification loss sums \((0.1-0.0)^2 + \cdots + (0.8-1.0)^2 + \cdots\) across all 20 slots.</p>
+
+    <p>And for the cells that have <em>no</em> object — the vast majority — only a confidence loss applies, scaled down by \(\lambda_{noobj}\). If a no-object cell's two box predictors currently output confidences of 0.5 and 0.2 (should both be 0):</p>
+    <div class="math-box" style="text-align:center;">
+      \[ L_{i,noobj} = (0.5-0.0)^2 + (0.2-0.0)^2 \]
+    </div>
+
+    <p>Put together, the full loss sums over every grid cell and every box predictor:</p>
+    <div class="math-box">
+      \[ L = \lambda_{coord}\sum_{i=0}^{S^2}\sum_{j=0}^{B} \mathbb{1}^{obj}_{ij}\Big[(x_i-\hat{x}_i)^2+(y_i-\hat{y}_i)^2\Big] + \lambda_{coord}\sum_{i=0}^{S^2}\sum_{j=0}^{B}\mathbb{1}^{obj}_{ij}\Big[(\sqrt{w_i}-\sqrt{\hat{w}_i})^2+(\sqrt{h_i}-\sqrt{\hat{h}_i})^2\Big] \]
+      \[ + \sum_{i=0}^{S^2}\sum_{j=0}^{B}\mathbb{1}^{obj}_{ij}(C_i-\hat{C}_i)^2 + \lambda_{noobj}\sum_{i=0}^{S^2}\sum_{j=0}^{B}\mathbb{1}^{noobj}_{ij}(C_i-\hat{C}_i)^2 + \sum_{i=0}^{S^2}\mathbb{1}^{obj}_i\sum_{c\in classes}(p_i(c)-\hat{p}_i(c))^2 \]
+    </div>
+    <p>where \(\mathbb{1}^{obj}_i\) marks whether an object's center falls in cell \(i\), and \(\mathbb{1}^{obj}_{ij}\) marks which of the \(j\) box predictors in that cell is "responsible" — the one with the highest current IOU against the ground truth.</p>
+
+    <div class="aside">
+      <span class="term">Training schedule, briefly</span>
+      135 epochs on VOC 2007+2012, batch size 64, momentum 0.9, weight decay 0.0005. The learning rate is raised slowly from \(10^{-3}\) to \(10^{-2}\) over the first epochs — starting high causes divergence from unstable gradients — then held at \(10^{-2}\) for 75 epochs, \(10^{-3}\) for 30, and \(10^{-4}\) for the final 30. Dropout (rate 0.5) after the first FC layer, plus random scaling, translation, and HSV exposure/saturation jitter, prevent overfitting.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 09. NMS ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">09 · Cleaning Up Duplicate Detections</div>
+    <h2 class="title">IOU and Non-Max Suppression</h2>
+    <p class="lede">On PASCAL VOC, YOLO predicts 98 total bounding boxes per image (7×7 cells × 2 boxes). Most of the interesting cleanup happens after that, not during it.</p>
+
+    <div class="def">
+      <span class="term">Intersection over Union (IOU)</span>
+      IOU measures how much two boxes overlap: the area where they intersect, divided by the total area they cover together. IOU = 0 means no overlap at all; IOU = 1 means the two boxes are identical. An IOU above 0.5 against ground truth is generally treated as a "good" prediction.
+    </div>
+
+    <p>Because the grid enforces spatial diversity, an object is often cleanly claimed by exactly one cell. But large objects, or ones straddling a cell boundary, can get detected by more than one cell — producing several overlapping boxes for the same object. <strong>Non-Max Suppression (NMS)</strong> cleans this up: for each cluster of overlapping boxes above an IOU threshold, keep only the one with the highest confidence score and discard the rest.</p>
+
+    <p>NMS isn't as critical for YOLO's performance as it is for R-CNN or DPM — the grid design already limits duplicate detections — but it still adds a real 2–3% mAP improvement when applied.</p>
+  </div>
+</section>
+
+<!-- ================= 10. PERFORMANCE ================= -->
+<section class="paper">
+  <div class="wrap-wide">
+    <div class="kicker">10 · Was It Actually Good?</div>
+    <h2 class="title">mAP, FPS, and how YOLOv1 actually performed</h2>
+    <p class="lede">Two metrics matter here, and they're always in tension: mAP measures accuracy, FPS measures speed. Faster models tend to be less accurate; more accurate models tend to be slower. YOLO's whole philosophy is finding the best point on that curve.</p>
+
+    <div class="twocol">
+      <div class="def">
+        <span class="term">mAP — mean Average Precision</span>
+        Precision: of all predicted boxes, what fraction were actually correct? Recall: of all real objects, what fraction did the model find? Average Precision combines both into one number per class; mAP averages that across all 20 classes. Max possible = 100.
+      </div>
+      <div class="def">
+        <span class="term">FPS — Frames Per Second</span>
+        How many images the model processes per second. Real-time applications — live video, self-driving — need roughly 24–30 FPS or better just to keep up with the incoming footage.
+      </div>
+    </div>
+
+    <table>
+      <tr><th>Model</th><th>mAP</th><th>FPS</th></tr>
+      <tr><td>100Hz DPM</td><td class="mono">16.0</td><td class="mono">100</td></tr>
+      <tr><td>30Hz DPM</td><td class="mono">26.1</td><td class="mono">30</td></tr>
+      <tr><td>Fast YOLO</td><td class="mono">52.7</td><td class="mono">155</td></tr>
+      <tr><td>YOLO</td><td class="mono">63.4</td><td class="mono">45</td></tr>
+      <tr><td>Fastest DPM</td><td class="mono">30.4</td><td class="mono">15</td></tr>
+      <tr><td>R-CNN Minus R</td><td class="mono">53.5</td><td class="mono">6</td></tr>
+      <tr><td>Fast R-CNN</td><td class="mono">70.0</td><td class="mono">0.5</td></tr>
+      <tr><td>Faster R-CNN (VGG-16)</td><td class="mono">73.2</td><td class="mono">7</td></tr>
+    </table>
+
+    <p>The story: Fast YOLO was roughly twice as accurate as the fastest DPM variant while running 5× faster — a clean win on both axes. Against Faster R-CNN, the trade flips: Faster R-CNN scores nearly 10 mAP higher, but at only 7 FPS, nowhere near real-time video. YOLO ran more than 6× faster while giving up some accuracy. At the time, YOLO was the only detector that could clear the real-time bar (30+ FPS) while still being reasonably accurate — that combination is what made it stand out.</p>
+
+    <h3 class="sub-title">Generalization — the hidden strength</h3>
+    <p>Tested on the Picasso and People-Art datasets — paintings, never seen during training — YOLO dramatically outperformed both DPM and R-CNN:</p>
+    <table>
+      <tr><th>Model</th><th>VOC 2007 AP</th><th>Picasso AP</th><th>People-Art AP</th></tr>
+      <tr><td>YOLO</td><td class="mono">59.2</td><td class="mono">53.3</td><td class="mono">45</td></tr>
+      <tr><td>R-CNN</td><td class="mono">54.2</td><td class="mono">10.4</td><td class="mono">26</td></tr>
+      <tr><td>DPM</td><td class="mono">43.2</td><td class="mono">37.8</td><td class="mono">32</td></tr>
+    </table>
+    <p>R-CNN's accuracy collapses almost completely on artwork; YOLO barely dips. The reason is architectural: YOLO looks at the whole image at once during training, so it learns the overall context, shape, and layout of objects rather than memorizing local texture patches the way region-proposal methods tend to. That generalization gap matters enormously for real deployment, where the world never looks exactly like the training set.</p>
+  </div>
+</section>
+
+<!-- ================= 11. LIMITATIONS ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">11 · Where It Actually Broke</div>
+    <h2 class="title">YOLOv1's three real limitations</h2>
+    <p class="lede">These three weaknesses matter more than any other part of the paper — because every one of them became the direct research agenda for v2 and v3.</p>
+
+    <h3 class="sub-title">1. A hard ceiling of 49 objects</h3>
+    <p>A 7×7 grid has 49 cells, and each cell can claim at most one object. Fine for a typical photo; immediately limiting for a crowded street, a flock of birds, or a packed stadium.</p>
+
+    <h3 class="sub-title">2. Small objects in groups get missed</h3>
+    <p>Directly related to the ceiling above — if several small objects cluster together, their centers can fall in the same cell, and only one gets detected. Worse, by the final 7×7 feature map, each cell already represents a 64×64 pixel region of the original image — too coarse to resolve small objects that fit entirely within it.</p>
+
+    <h3 class="sub-title">3. Poor localization</h3>
+    <p>Predicted boxes were often noticeably off from the true object boundary — for two compounding reasons: the fully-connected layers at the end flatten everything and lose precise spatial information, and the two box predictors per cell had no predefined shape to start from, so the network had to learn box shapes completely from scratch, a much harder optimization problem.</p>
+
+    <table class="nudge-table">
+      <tr><th></th><th>Correct</th><th>Localization error</th><th>Background error</th></tr>
+      <tr><td>Fast R-CNN</td><td>71.6%</td><td>8.6%</td><td class="nudge-neg">13.6%</td></tr>
+      <tr><td>YOLO</td><td>65.5%</td><td class="nudge-neg">19.0%</td><td>4.75%</td></tr>
+    </table>
+    <p>YOLO made more than twice the localization mistakes of Fast R-CNN — but Fast R-CNN was almost 3× more likely to hallucinate a detection on pure background. Neither model is strictly better; they fail in opposite ways, which is exactly why combining the two (rescoring Fast R-CNN detections using YOLO to kill background false positives) boosted the combined mAP to 75.0%, a 3.2-point gain over Fast R-CNN alone.</p>
+
+    <table>
+      <tr><th>YOLOv1 limitation</th><th>Fixed in</th></tr>
+      <tr><td>7×7 grid → max 49 objects</td><td>v2 / v3: larger grids (13×13, 26×26, 52×52)</td></tr>
+      <tr><td>Poor small-object detection</td><td>v3: multi-scale detection</td></tr>
+      <tr><td>Poor localization, no real anchors</td><td>v2: proper anchor boxes via k-means</td></tr>
+      <tr><td>FC layers lose spatial info</td><td>v2: fully convolutional network</td></tr>
+    </table>
+
+    <div class="def">
+      <span class="term">YOLOv1, in one sentence</span>
+      Fast enough for real-time video, accurate enough for many real applications, but it struggled with small objects, crowded scenes, and precise box placement — setting the exact research agenda for everything that followed.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 12. YOLOv2 ================= -->
+<section class="dark">
+  <div class="wrap-wide">
+    <div class="kicker">12 · One Year Later, Every Weakness Addressed</div>
+    <h2 class="title">YOLOv2 (YOLO9000)</h2>
+    <p class="lede">Released in 2016, YOLOv2's guiding question was simple: can we make YOLO both more accurate <em>and</em> still fast? Every change below is a direct answer to something on the limitations list.</p>
+
+    <h3 class="sub-title">Batch normalization</h3>
+    <p>Added after every conv layer to keep activations in a stable, consistent range. Result: +2% mAP, and dropout could be removed entirely — the network became more stable and trained faster.</p>
+
+    <h3 class="sub-title">High-resolution classifier</h3>
+    <p>YOLOv1 pretrained at 224×224 then jumped straight to 448×448 detection training — forcing the network to adapt to a new resolution and learn detection simultaneously. YOLOv2 first fine-tunes the backbone on ImageNet at 448×448 for 10 epochs before detection training even starts. Result: +4% mAP, for a genuinely simple change.</p>
+
+    <h3 class="sub-title">Fully convolutional — no more FC layers</h3>
+    <p>The FC layers are removed entirely. Predictions come directly from the final conv layer. This preserves spatial information all the way to the output, lets the network accept any input size instead of being locked to 448×448, and cuts parameters — making the model faster too.</p>
+
+    <h3 class="sub-title">Anchor boxes, done properly this time</h3>
+    <p>Rather than learning box shapes from nothing, YOLOv2 runs <strong>k-means clustering</strong> on the widths and heights of every ground-truth box in the training set, producing the shapes that actually occur in the data — tall and thin for people, wide and short for cars, small and square for faces. 5 anchor boxes per cell (up from v1's 2, which weren't properly defined at all). The network now only needs to learn small adjustments to a realistic starting shape, not an entire shape from scratch.</p>
+
+    <h3 class="sub-title">New backbone: Darknet-19</h3>
+    <p>A cleaner 19-layer backbone purpose-built for the speed/accuracy tradeoff, using aggressive 1×1 convolutions to cut computation before the expensive 3×3 layers.</p>
+
+    <h3 class="sub-title">Multi-scale training</h3>
+    <p>Since the network is now fully convolutional, it can accept different input sizes. Every 10 batches during training, the input resolution is randomly resampled — from 320×320 up to 608×608. At inference, you can then choose a small input for speed (mobile/edge) or a large input for accuracy — same trained weights, different tradeoff, just by changing the input size.</p>
+
+    <h3 class="sub-title">Passthrough layer</h3>
+    <p>To help with small objects, a passthrough layer takes the earlier, higher-resolution 26×26 feature map and concatenates it with the final 13×13 map — giving the detection head both a zoomed-out view (good for large objects) and a zoomed-in view (good for small ones) at once. This is the direct precursor to full multi-scale detection in v3.</p>
+
+    <div class="def">
+      <span class="term">The "9000" — combining detection and classification data</span>
+      Detection datasets like Pascal VOC only cover 20 classes; COCO covers 80. The authors built a hierarchical WordTree that organizes classes from both detection and classification datasets (like ImageNet) into one tree, letting the model train on both simultaneously. The result: YOLO9000 could detect over 9000 categories — hence the name.
+    </div>
+
+    <table>
+      <tr><th>What changed</th><th>v1</th><th>v2</th></tr>
+      <tr><td>Batch normalization</td><td>No</td><td>Yes</td></tr>
+      <tr><td>FC layers</td><td>2 FC layers</td><td>Fully convolutional</td></tr>
+      <tr><td>Anchor boxes</td><td>2, freeform</td><td>5, k-means chosen</td></tr>
+      <tr><td>Backbone</td><td>GoogLeNet-inspired</td><td>Darknet-19</td></tr>
+      <tr><td>Multi-scale training</td><td>No</td><td>Yes</td></tr>
+      <tr><td>Speed</td><td class="mono">45 FPS</td><td class="mono">67 FPS</td></tr>
+      <tr><td>mAP (VOC 2007)</td><td class="mono">63.4</td><td class="mono">78.6</td></tr>
+    </table>
+    <p>Every single number improved. That's what a well-engineered version 2 looks like — faster <em>and</em> more accurate, with no tradeoff at all.</p>
+  </div>
+</section>
+
+<!-- ================= 13. YOLOv3 ================= -->
+<section class="paper">
+  <div class="wrap-wide">
+    <div class="kicker">13 · Solving Multi-Scale Detection For Real</div>
+    <h2 class="title">YOLOv3</h2>
+    <p class="lede">2018. If v2 fixed training and anchors, v3 tackles the hardest problem still standing: detecting both tiny and large objects reliably in the same image.</p>
+
+    <p>YOLOv2's passthrough layer was a partial patch. The deeper issue remained: <strong>a single feature map cannot be simultaneously good at detecting small and large objects.</strong> Early layers have high spatial resolution — good for fine detail, good for small objects. Late layers have low resolution but rich semantic context — good for large objects. v2 only predicted from the final, low-resolution map.</p>
+
+    <p>YOLOv3's answer: predict from <strong>three different scales at once.</strong></p>
+
+    <table>
+      <tr><th>Scale</th><th>Feature map size</th><th>Best for</th></tr>
+      <tr><td>Large</td><td class="mono">13×13</td><td>Large objects — cars, buses, near-field people</td></tr>
+      <tr><td>Medium</td><td class="mono">26×26</td><td>Medium objects</td></tr>
+      <tr><td>Small</td><td class="mono">52×52</td><td>Small objects — faces, birds, distant pedestrians</td></tr>
+    </table>
+    <p>Each scale gets its own 3 anchor boxes, so 3 anchors × 3 scales = 9 total anchors, still chosen via k-means but now split across scales.</p>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 700 260" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="11.5" text-anchor="middle">
+            <rect x="20" y="100" width="90" height="90" fill="#181C26" stroke="#5FAE82" stroke-width="1.4"/>
+            <text x="65" y="150" fill="#5FAE82">52×52</text>
+            <text x="65" y="205" fill="#8B92A1">small objects</text>
+
+            <path d="M 115 145 L 250 145" stroke="#33425a" marker-end="url(#y1)"/>
+            <rect x="255" y="118" width="70" height="70" fill="#181C26" stroke="#E7714F" stroke-width="1.4"/>
+            <text x="290" y="158" fill="#E7714F">26×26</text>
+            <text x="290" y="205" fill="#8B92A1">medium</text>
+
+            <path d="M 330 153 L 440 153" stroke="#33425a" marker-end="url(#y1)"/>
+            <rect x="445" y="135" width="50" height="50" fill="#181C26" stroke="#FFB454" stroke-width="1.4"/>
+            <text x="470" y="163" fill="#FFB454">13×13</text>
+            <text x="470" y="205" fill="#8B92A1">large</text>
+            <defs><marker id="y1" markerWidth="8" markerHeight="8" refX="6" refY="2.5" orient="auto"><path d="M0,0 L6,2.5 L0,5 Z" fill="#33425a"/></marker></defs>
+
+            <path d="M 470 135 C 470 60, 290 60, 290 118" stroke="#8B92A1" stroke-dasharray="3,2" fill="none" marker-end="url(#y2)"/>
+            <path d="M 290 118 C 290 40, 65 40, 65 100" stroke="#8B92A1" stroke-dasharray="3,2" fill="none" marker-end="url(#y2)"/>
+            <defs><marker id="y2" markerWidth="8" markerHeight="8" refX="6" refY="2.5" orient="auto"><path d="M0,0 L6,2.5 L0,5 Z" fill="#8B92A1"/></marker></defs>
+            <text x="380" y="45" fill="#8B92A1" font-size="11">upsample + concatenate with earlier features</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 4 — the feature pyramid. The 13×13 map is upsampled and merged with the saved 26×26 features, which is upsampled again and merged with the saved 52×52 features. Predictions happen at all three points.</figcaption>
+    </figure>
+
+    <p>The key trick is what "upsample and concatenate" actually combines: deep features from later layers carry rich semantic understanding ("this looks like a dog"), while shallow features from earlier layers carry precise spatial detail ("it's exactly here, and this big"). Merging them gives both at once — understanding <em>and</em> location — which is exactly what accurate detection needs. This structure is a Feature Pyramid Network (FPN), a technique YOLOv3 adopted from the broader research community rather than inventing from scratch.</p>
+
+    <h3 class="sub-title">New backbone: Darknet-53</h3>
+    <p>Darknet-19 is replaced with a much deeper 53-layer backbone, packed with residual (skip-connection) blocks — the same idea that lets ResNets train cleanly at huge depth without gradients vanishing.</p>
+    <table>
+      <tr><th>Backbone</th><th>Top-1 accuracy</th><th>FPS</th></tr>
+      <tr><td>ResNet-101</td><td class="mono">77.1%</td><td class="mono">53</td></tr>
+      <tr><td>ResNet-152</td><td class="mono">77.6%</td><td class="mono">37</td></tr>
+      <tr><td>Darknet-53</td><td class="mono">77.2%</td><td class="mono">78</td></tr>
+    </table>
+    <p>Matches ResNet-152's accuracy at roughly twice the speed — the whole point of designing a backbone specifically for this tradeoff rather than reusing one built for classification benchmarks alone.</p>
+
+    <h3 class="sub-title">Softmax → independent sigmoid for class prediction</h3>
+    <p>Softmax forces class probabilities to sum to 1 — assuming an object belongs to exactly one class, mutually exclusive with all others. Real datasets, especially with hierarchical labels, break that assumption ("dog" and "animal" can both be true). YOLOv3 uses an independent sigmoid per class instead, letting each be true or false on its own — which also makes multi-label detection possible.</p>
+
+    <h3 class="sub-title">Doing the output-shape math</h3>
+    <p>Each box vector is now \(5 + 80 = 85\) numbers (x, y, w, h, confidence, plus 80 COCO classes):</p>
+    <table>
+      <tr><th>Scale</th><th>Calculation</th><th>Boxes</th></tr>
+      <tr><td>13×13</td><td class="mono">13×13×3×85</td><td class="mono">507</td></tr>
+      <tr><td>26×26</td><td class="mono">26×26×3×85</td><td class="mono">2,028</td></tr>
+      <tr><td>52×52</td><td class="mono">52×52×3×85</td><td class="mono">8,112</td></tr>
+      <tr><td><strong>Total</strong></td><td></td><td class="mono"><strong>10,647</strong></td></tr>
+    </table>
+    <p>All 10,647 candidate boxes are generated in one forward pass; confidence thresholding and NMS then collapse that down to a handful of final detections.</p>
+
+    <table>
+      <tr><th>What changed</th><th>v2</th><th>v3</th></tr>
+      <tr><td>Backbone</td><td>Darknet-19</td><td>Darknet-53 (residual blocks)</td></tr>
+      <tr><td>Detection scales</td><td>1 (13×13 only)</td><td>3 (13×13, 26×26, 52×52)</td></tr>
+      <tr><td>Total anchors</td><td>5</td><td>9 (3 per scale)</td></tr>
+      <tr><td>Class prediction</td><td>Softmax</td><td>Independent sigmoid</td></tr>
+      <tr><td>mAP (COCO)</td><td class="mono">21.6</td><td class="mono">33.0</td></tr>
+      <tr><td>Speed</td><td class="mono">67 FPS</td><td class="mono">~35 FPS</td></tr>
+    </table>
+    <p>The mAP jump from 21.6 to 33.0 on COCO is driven almost entirely by small objects finally being detected well for the first time — the exact problem the whole multi-scale redesign targeted.</p>
+
+    <div class="def">
+      <span class="term">Why v3 became the long-running default</span>
+      Fast enough for real-time on a decent GPU, accurate enough for most real applications, well documented and open source, and — for the first time — genuinely good at both tiny and large objects in the same frame. That combination is why most detection tutorials and production systems from 2018–2021 built on YOLOv3, and why it's still referenced constantly today.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 14. CHEAT SHEET ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">14 · For When You Just Need The Short Version</div>
+    <h2 class="title">The whole evolution, in one table</h2>
+
+    <table>
+      <tr><th>Dimension</th><th>v1</th><th>v2</th><th>v3</th></tr>
+      <tr><td>Grid / scales</td><td class="mono">7×7, 1 scale</td><td class="mono">13×13, 1 scale</td><td class="mono">13/26/52, 3 scales</td></tr>
+      <tr><td>Anchors</td><td>2, freeform</td><td>5, k-means</td><td>9, k-means (3/scale)</td></tr>
+      <tr><td>Backbone</td><td>GoogLeNet-inspired, 24 conv + 2 FC</td><td>Darknet-19</td><td>Darknet-53 (residual)</td></tr>
+      <tr><td>Class prediction</td><td>Conditional softmax</td><td>Conditional softmax</td><td>Independent sigmoid</td></tr>
+      <tr><td>mAP (VOC 2007)</td><td class="mono">63.4</td><td class="mono">78.6</td><td>—</td></tr>
+      <tr><td>mAP (COCO)</td><td>—</td><td class="mono">21.6</td><td class="mono">33.0</td></tr>
+      <tr><td>Speed</td><td class="mono">45 FPS</td><td class="mono">67 FPS</td><td class="mono">~35 FPS</td></tr>
+    </table>
+
+    <h3 class="sub-title">If you forget everything else, remember this</h3>
+    <ul class="clean">
+      <li><strong>One pass, not hundreds.</strong> The whole point of YOLO is reframing detection as regression, not repeated classification.</li>
+      <li><strong>The grid rule:</strong> whichever cell contains an object's center owns detecting it.</li>
+      <li><strong>Confidence = Pr(Object) × IOU</strong> — both "is it there" and "does the box fit" in one number.</li>
+      <li><strong>v1's three scars</strong> — object cap, small-object clusters, poor localization — map directly onto v2 and v3's fixes.</li>
+      <li><strong>v2</strong> = better training tricks + real anchors + fully convolutional.</li>
+      <li><strong>v3</strong> = multi-scale detection via a feature pyramid, finally solving small objects.</li>
+      <li>NMS and IOU thresholding turn hundreds (or thousands) of raw candidate boxes into a handful of final detections.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= FOOTER ================= -->
+<footer>
+  <div class="wrap">
+    <hr class="thin">
+    <p style="color:#C9CDD6; font-size:15.5px;">Built from Redmon, Divvala, Girshick & Farhadi's <strong>"You Only Look Once: Unified, Real-Time Object Detection"</strong> (2016), my own class notes on the grid math, loss function, and architecture, and a set of teaching notes that walked through YOLOv1's performance/limitations and the full v2/v3 evolution — reorganized, worked through by hand, and written in my own words so it actually sticks.</p>
+    <div class="seriesnav">
+      <a href="#">Redmon et al. — You Only Look Once (2016)</a>
+      <a href="#">My class notes — grid math, loss function, architecture</a>
+      <a href="#">Teaching notes — limitations, YOLOv2, YOLOv3</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
