@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How an RNN Remembers (Explained Properly)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js"></script>
+<style>
+  :root{
+    --ink:#1B1F27;
+    --paper:#F6F3EC;
+    --paper-dim:#ECE7DA;
+    --dark:#11141B;
+    --dark-2:#181C26;
+    --amber:#FFB454;
+    --amber-soft:#FFD9A0;
+    --wire-cool:#5C7A99;
+    --wire-cool-dim:#33425a;
+    --muted:#8B92A1;
+    --muted-dark:#6b7280;
+    --red:#E7714F;
+    --green:#5FAE82;
+    --rule: rgba(255,255,255,0.08);
+    --rule-dark: rgba(20,20,20,0.10);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    font-size:17px;
+    line-height:1.72;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{ font-family:'Space Grotesk',sans-serif; font-weight:600; letter-spacing:-0.01em; margin:0; }
+  .mono{ font-family:'JetBrains Mono',monospace; }
+  a{ color:inherit; }
+  p{ margin:0 0 1.15em 0; }
+  .wrap{ max-width:760px; margin:0 auto; padding:0 28px; }
+  .wrap-wide{ max-width:920px; margin:0 auto; padding:0 28px; }
+
+  /* ===== HERO ===== */
+  .hero{
+    background:radial-gradient(ellipse 900px 500px at 50% -10%, #1d2433 0%, var(--dark) 60%);
+    color:var(--paper);
+    padding:104px 0 84px;
+    position:relative;
+    overflow:hidden;
+  }
+  .hero .eyebrow{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px; letter-spacing:0.14em; text-transform:uppercase;
+    color:var(--amber); margin-bottom:22px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow .dot{ width:6px; height:6px; border-radius:50%; background:var(--amber); box-shadow:0 0 8px 2px var(--amber); }
+  .hero h1{ font-size:50px; line-height:1.1; color:#F4F1E8; max-width:680px; }
+  .hero h1 em{ font-style:normal; color:var(--amber); }
+  .hero .sub{ margin-top:24px; font-size:18.5px; color:#B9BFCC; max-width:560px; }
+  @media (max-width:640px){ .hero{ padding:80px 0 60px; } .hero h1{ font-size:34px; } }
+
+  section{ padding:80px 0; }
+  section.dark{ background:var(--dark); color:#E7E5DC; }
+  section.dark h2, section.dark h3{ color:#F4F1E8; }
+  section.paper{ background:var(--paper); }
+  section.paper-dim{ background:var(--paper-dim); }
+  .kicker{
+    font-family:'JetBrains Mono',monospace; font-size:12px;
+    letter-spacing:0.13em; text-transform:uppercase; color:var(--amber);
+  }
+  section.paper .kicker, section.paper-dim .kicker{ color:#B5662E; }
+  h2.title{ font-size:33px; margin-top:10px; margin-bottom:26px; }
+  h3.sub-title{ font-size:21px; margin-top:42px; margin-bottom:14px; }
+  .lede{ font-size:19px; color:var(--muted-dark); max-width:620px; }
+  section.dark .lede{ color:var(--muted); }
+
+  figure{ margin:32px 0; }
+  figure svg{ width:100%; height:auto; display:block; }
+  figcaption{
+    font-family:'JetBrains Mono',monospace; font-size:12.5px;
+    color:var(--muted-dark); margin-top:12px; padding-top:10px;
+    border-top:1px solid var(--rule-dark);
+  }
+  section.dark figcaption{ color:var(--muted); border-top:1px solid var(--rule); }
+  .fig-card{ background:var(--dark); border-radius:14px; padding:30px 26px 18px; }
+  section.dark .fig-card{ background:#0B0D12; border:1px solid var(--rule); }
+  .fig-card.light{ background:#fff; border:1px solid #E3DECE; }
+  .fig-card.light figcaption{ color:var(--muted-dark); border-top:1px solid #ECE6D6; }
+
+  .def{
+    border-left:3px solid var(--amber);
+    background:rgba(255,180,84,0.07);
+    padding:16px 20px; border-radius:0 8px 8px 0; margin:24px 0;
+  }
+  .def .term{
+    font-family:'JetBrains Mono',monospace; font-size:12px;
+    letter-spacing:0.08em; text-transform:uppercase;
+    color:#B5662E; display:block; margin-bottom:6px;
+  }
+  section.dark .def{ background:rgba(255,180,84,0.10); }
+  section.dark .def .term{ color:var(--amber); }
+
+  .aside{
+    border-left:3px solid var(--wire-cool);
+    background:rgba(92,122,153,0.07);
+    padding:16px 20px; border-radius:0 8px 8px 0; margin:24px 0; font-size:15.5px;
+  }
+  .aside .term{
+    font-family:'JetBrains Mono',monospace; font-size:11.5px;
+    letter-spacing:0.08em; text-transform:uppercase;
+    color:#3d5670; display:block; margin-bottom:6px;
+  }
+  section.dark .aside{ background:rgba(92,122,153,0.12); }
+  section.dark .aside .term{ color:#9db7cf; }
+
+  .math-box{
+    background:#fff; border:1px solid #E3DECE; border-radius:10px;
+    padding:20px 24px; margin:22px 0; overflow-x:auto;
+  }
+  section.dark .math-box{ background:#0B0D12; border-color:var(--rule); }
+
+  table{ width:100%; border-collapse:collapse; margin:26px 0; font-size:15.5px; }
+  th,td{ padding:12px 14px; text-align:left; border-bottom:1px solid var(--rule-dark); }
+  section.dark th, section.dark td{ border-bottom:1px solid var(--rule); }
+  th{ font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:0.07em; text-transform:uppercase; color:var(--muted-dark); }
+  section.dark th{ color:var(--muted); }
+  td .mono{ color:var(--amber); }
+  section.paper td .mono, section.paper-dim td .mono{ color:#B5662E; }
+
+  .seriesnav{ display:flex; flex-wrap:wrap; gap:10px; margin-top:34px; }
+  .seriesnav a{
+    font-family:'JetBrains Mono',monospace; font-size:12.5px; padding:8px 14px;
+    border:1px solid var(--rule); border-radius:999px; text-decoration:none;
+    color:#C9CDD6; transition:border-color .2s, color .2s;
+  }
+  .seriesnav a:hover{ border-color:var(--amber); color:var(--amber); }
+
+  footer{ background:var(--dark); color:var(--muted); padding:60px 0 50px; font-size:14.5px; }
+  footer a{ color:var(--amber); text-decoration:none; border-bottom:1px solid rgba(255,180,84,0.3); }
+  hr.thin{ border:none; border-top:1px solid var(--rule); margin:30px 0; }
+
+  ul.clean{ padding-left:0; list-style:none; margin:18px 0; }
+  ul.clean li{ padding-left:22px; position:relative; margin-bottom:10px; }
+  ul.clean li::before{
+    content:""; position:absolute; left:0; top:9px;
+    width:7px; height:7px; border-radius:50%;
+    background:var(--amber); box-shadow:0 0 6px 1px rgba(255,180,84,0.6);
+  }
+  ol.steps{ padding-left:22px; margin:18px 0; }
+  ol.steps li{ margin-bottom:8px; }
+
+  .twocol{ display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+  @media (max-width:680px){ .twocol{ grid-template-columns:1fr; } }
+  .threecol{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px; }
+  @media (max-width:780px){ .threecol{ grid-template-columns:1fr; } }
+
+  .pixel-grid{
+    display:inline-grid; gap:2px;
+    font-family:'JetBrains Mono',monospace; font-size:11px;
+  }
+  .px{ width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:3px; font-weight:500; }
+  .px-hi{ background:#FFB454; color:#1B1F27; }
+  .px-lo{ background:#33425a; color:#8B92A1; }
+  .px-neu{ background:#22283a; color:#6b7280; }
+  .px-act{ background:#5FAE82; color:#fff; border:2px solid #3d8c60; }
+
+  .pulse{ animation: pulseGlow 2.6s ease-in-out infinite; }
+  @keyframes pulseGlow{ 0%,100%{ opacity:0.55; } 50%{ opacity:1; } }
+  @media (prefers-reduced-motion: reduce){ .pulse{ animation:none; } }
+
+  /* conv demo interactive */
+  .conv-demo{ display:flex; gap:28px; align-items:flex-start; flex-wrap:wrap; margin:28px 0; }
+  .conv-demo-grid{ display:grid; gap:3px; }
+  .conv-cell{
+    width:38px; height:38px; display:flex; align-items:center; justify-content:center;
+    border-radius:5px; font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:500;
+    background:#22283a; color:#6b7280; border:1px solid #33425a;
+    transition:background .2s, color .2s, border-color .2s;
+  }
+  .conv-cell.hi{ background:#FFB454; color:#1B1F27; border-color:#FFB454; }
+  .conv-cell.filter{ background:#5C7A99; color:#E7E5DC; border-color:#7090b0; }
+  .conv-cell.out{ background:#5FAE82; color:#fff; border-color:#3d8c60; }
+  .conv-cell.out-pending{ background:#33425a; color:#5b6880; border-color:#33425a; }
+  .demo-btn{
+    padding:8px 20px; border-radius:8px; border:1px solid var(--wire-cool-dim);
+    background:transparent; color:#C9CDD6; font-family:'JetBrains Mono',monospace;
+    font-size:12.5px; cursor:pointer; transition:border-color .2s, color .2s;
+  }
+  .demo-btn:hover{ border-color:var(--amber); color:var(--amber); }
+  .demo-label{ font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:0.08em; }
+</style>
+</head>
+<body>
+
+<!-- ================= HERO ================= -->
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow"><span class="dot pulse"></span>BLOG 03 · RECURRENT NEURAL NETWORKS</div>
+    <h1>A network that <em>remembers what it just saw</em> is how a machine learns to handle time.</h1>
+    <p class="sub">I sat through MIT 6.S191's Lecture 2 on sequence modeling, transcribed it screenshot by screenshot, and cross-checked everything against Stanford's CS230 RNN cheatsheet. This is what I wrote alongside all of that — what "recurrence" actually means, why one hidden vector carries an entire sentence's worth of context, and the part that took me longest to really sit with: why the exact same weights get reused at every single time step.</p>
+
+    <figure style="margin-top:48px;">
+      <div class="fig-card" style="background:#0B0D12; border:1px solid rgba(255,255,255,0.08);">
+        <svg viewBox="0 0 700 220" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrowH" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L8,3 L0,6 Z" fill="#5C7A99"/>
+            </marker>
+          </defs>
+          <text x="350" y="26" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#8B92A1">the same cell, called again and again, carrying a hidden state forward</text>
+
+          <!-- three unrolled cells -->
+          <rect x="70" y="60" width="110" height="90" rx="8" fill="#181C26" stroke="#FFB454" stroke-width="1.5"/>
+          <text x="125" y="110" text-anchor="middle" font-family="Space Grotesk" font-size="15" fill="#FFB454">RNN</text>
+          <text x="125" y="128" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#8B92A1">t = 0</text>
+
+          <rect x="295" y="60" width="110" height="90" rx="8" fill="#181C26" stroke="#FFB454" stroke-width="1.5"/>
+          <text x="350" y="110" text-anchor="middle" font-family="Space Grotesk" font-size="15" fill="#FFB454">RNN</text>
+          <text x="350" y="128" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#8B92A1">t = 1</text>
+
+          <rect x="520" y="60" width="110" height="90" rx="8" fill="#181C26" stroke="#FFB454" stroke-width="1.5"/>
+          <text x="575" y="110" text-anchor="middle" font-family="Space Grotesk" font-size="15" fill="#FFB454">RNN</text>
+          <text x="575" y="128" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#8B92A1">t = 2</text>
+
+          <!-- h arrows between cells -->
+          <line x1="180" y1="105" x2="293" y2="105" stroke="#5C7A99" stroke-width="2" marker-end="url(#arrowH)"/>
+          <text x="236" y="97" text-anchor="middle" font-family="JetBrains Mono" font-size="12" fill="#5C7A99">h₀</text>
+          <line x1="405" y1="105" x2="518" y2="105" stroke="#5C7A99" stroke-width="2" marker-end="url(#arrowH)"/>
+          <text x="461" y="97" text-anchor="middle" font-family="JetBrains Mono" font-size="12" fill="#5C7A99">h₁</text>
+
+          <!-- inputs -->
+          <circle cx="125" cy="185" r="14" fill="#33425a"/><text x="125" y="189" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#B9BFCC">x₀</text>
+          <line x1="125" y1="171" x2="125" y2="152" stroke="#5C7A99" stroke-width="2" marker-end="url(#arrowH)"/>
+          <circle cx="350" cy="185" r="14" fill="#33425a"/><text x="350" y="189" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#B9BFCC">x₁</text>
+          <line x1="350" y1="171" x2="350" y2="152" stroke="#5C7A99" stroke-width="2" marker-end="url(#arrowH)"/>
+          <circle cx="575" cy="185" r="14" fill="#33425a"/><text x="575" y="189" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#B9BFCC">x₂</text>
+          <line x1="575" y1="171" x2="575" y2="152" stroke="#5C7A99" stroke-width="2" marker-end="url(#arrowH)"/>
+
+          <!-- outputs -->
+          <circle cx="125" cy="38" r="13" fill="#5FAE82" opacity="0.85"/><text x="125" y="42" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#0B0D12">ŷ₀</text>
+          <line x1="125" y1="60" x2="125" y2="52" stroke="#5FAE82" stroke-width="2" marker-end="url(#arrowH)"/>
+          <circle cx="350" cy="38" r="13" fill="#5FAE82" opacity="0.85"/><text x="350" y="42" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#0B0D12">ŷ₁</text>
+          <line x1="350" y1="60" x2="350" y2="52" stroke="#5FAE82" stroke-width="2" marker-end="url(#arrowH)"/>
+          <circle cx="575" cy="38" r="13" fill="#5FAE82" opacity="0.85"/><text x="575" y="42" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#0B0D12">ŷ₂</text>
+          <line x1="575" y1="60" x2="575" y2="52" stroke="#5FAE82" stroke-width="2" marker-end="url(#arrowH)"/>
+
+          <text x="350" y="210" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#6b7280">one network, one set of weights, reused at every time step</text>
+        </svg>
+      </div>
+      <figcaption>FIG 1 — an RNN unrolled across three time steps. It looks like three networks, but it's one network called repeatedly, passing its hidden state h forward each time.</figcaption>
+    </figure>
+  </div>
+</header>
+
+<!-- ================= 01. WHY FEEDFORWARD NETS FALL SHORT ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">01 · The Problem That Started Everything</div>
+    <h2 class="title">Predicting the future needs the past</h2>
+    <p class="lede">MIT's lecture opens with a deceptively simple example, and it's worth sitting with because the entire rest of the lecture is really just formalizing this one intuition.</p>
+
+    <p>You're shown a ball in a 2D space and asked: where will it go next? With nothing else to go on, <strong>any answer is a guess</strong> — a random proposal about where it might travel. But give that same question a bit of history — a trail of the ball's last few positions — and suddenly the problem becomes almost trivial. Everyone in the room would point to roughly the same spot. Nothing about the physics changed. What changed is that you were given <em>context resolved in time</em>, and your brain used it.</p>
+
+    <div class="def">
+      <span class="term">The core idea behind sequence modeling</span>
+      A huge class of real problems have data that's resolved in time, or can be modeled as a sequence: audio waveforms split into chunks of sound, text split into words or characters, medical signals, financial time series, biological sequences, patterns of movement, weather. In every one of these, the prediction at a given moment should depend not just on the current input, but on what came before it.
+    </div>
+
+    <p>So why not just reuse the feedforward networks from lecture one? Here's the direct way to try it: take your feedforward layer, and apply it to the input at time step 0, get an output. Apply the exact same layer to the input at time step 1, get another output. Do this again at time step 2, and so on. This actually works, in the sense that you get a prediction at every time step. But look closely at what's happening — <strong>the time steps never talk to each other</strong>. The computation at t=1 has no idea what happened at t=0. Each prediction is made in total isolation.</p>
+
+    <p>That's exactly the ball problem again. Treating each time step in isolation is the "no history" case — every prediction is a guess with no context. If the past genuinely carries information relevant to the present (and in sequential data, it almost always does), then a model that can't see the past is leaving that information on the table.</p>
+
+    <div class="aside">
+      <span class="term">Concretely, what we need</span>
+      The predicted output at a later time step — say <span class="mono">t=2</span> — should depend somehow on the inputs at the prior time steps, <span class="mono">x₁</span> and <span class="mono">x₀</span>. We need a way to preserve information from the past and carry it forward to inform predictions later on. That single requirement is the entire motivation for recurrence.
+    </div>
+  </div>
+</section>
+<!-- ================= 02. BUILDING RECURRENCE FROM THE PERCEPTRON ================= -->
+<section class="dark">
+  <div class="wrap-wide">
+    <div class="kicker">02 · Building Up From What We Already Know</div>
+    <h2 class="title">From perceptron, to layer, to something with memory</h2>
+    <p class="lede">MIT builds this up in small, deliberate steps rather than dropping the RNN diagram on you directly. It's worth walking through each step, because the final architecture is just three small changes stacked on top of each other.</p>
+
+    <p><strong>Step 1 — the perceptron you already know.</strong> Inputs <span class="mono">x⁽¹⁾ … x⁽ᵐ⁾</span>, each multiplied by a weight, summed, passed through a nonlinearity, producing one output <span class="mono">ŷ</span>. Nothing new here — this is the exact same unit from lecture one.</p>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 500 220" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="60" cy="50" r="20" fill="#33425a"/><text x="60" y="55" text-anchor="middle" font-family="JetBrains Mono" font-size="12" fill="#B9BFCC">x⁽¹⁾</text>
+          <circle cx="60" cy="110" r="20" fill="#33425a"/><text x="60" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="12" fill="#B9BFCC">x⁽²⁾</text>
+          <circle cx="60" cy="170" r="20" fill="#33425a"/><text x="60" y="175" text-anchor="middle" font-family="JetBrains Mono" font-size="12" fill="#B9BFCC">xᵐ</text>
+          <circle cx="260" cy="110" r="26" fill="#5FAE82" opacity="0.85"/><text x="260" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#0B0D12">z</text>
+          <line x1="80" y1="50" x2="236" y2="100" stroke="#5C7A99" stroke-width="1.5"/>
+          <line x1="80" y1="110" x2="234" y2="110" stroke="#5C7A99" stroke-width="1.5"/>
+          <line x1="80" y1="170" x2="236" y2="120" stroke="#5C7A99" stroke-width="1.5"/>
+          <text x="150" y="65" font-family="JetBrains Mono" font-size="11" fill="#8B92A1">w₁</text>
+          <text x="150" y="105" font-family="JetBrains Mono" font-size="11" fill="#8B92A1">w₂</text>
+          <text x="150" y="155" font-family="JetBrains Mono" font-size="11" fill="#8B92A1">wₘ</text>
+          <line x1="286" y1="110" x2="370" y2="110" stroke="#5C7A99" stroke-width="1.5" marker-end="url(#arrowH)"/>
+          <text x="330" y="100" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#8B92A1">y=g(z)</text>
+          <circle cx="410" cy="110" r="22" fill="#FFB454"/><text x="410" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="12" fill="#1B1F27">ŷ</text>
+        </svg>
+      </div>
+      <figcaption>FIG 2 — the perceptron: multiple inputs, one weighted sum, one nonlinearity, one output. Still no notion of time.</figcaption>
+    </figure>
+
+    <p><strong>Step 2 — collapse this into a layer, at a single time step.</strong> Stack perceptrons together and you get a layer that maps a multi-dimensional input to a multi-dimensional output. Now label the input <span class="mono">x</span> of <span class="mono">t</span> — some particular time step <span class="mono">t</span>. But notice: this still isn't sequential. We're just looking at one snapshot in time. There's no link yet between this time step and any other.</p>
+
+    <p><strong>Step 3 — apply that same layer across many time steps, but keep them isolated.</strong> Flip the diagram on its side, and imagine feeding in <span class="mono">x₀</span>, getting <span class="mono">ŷ₀</span>. Then <span class="mono">x₁</span> in, <span class="mono">ŷ₁</span> out. Then <span class="mono">x₂</span>, and so on. This is the "isolated time steps" version from Section 01 — and it's exactly where the problem lives. There is still no connection carrying information from <span class="mono">t=0</span> into the computation at <span class="mono">t=1</span>.</p>
+
+    <p><strong>Step 4 — the actual fix: link the time steps through an internal state.</strong> Introduce a variable <span class="mono">h</span> — the network's own internal state, maintained and updated by the network itself, passed from one time step to the next. Now the prediction at time <span class="mono">t</span> is a function of both the input at that time step <em>and</em> the state carried over from the previous one:</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ \hat{y}_t = f(x_t, h_{t-1}) \]
+      <span style="font-size:13px; color:#8B92A1;">output — depends on — input, and past memory</span>
+    </div>
+
+    <p>That's the whole idea. Not a new network per time step — still one network — but its computation at each step is now linked to its own past computations through this state variable. This link, this looping-back of information, is what we call <strong>recurrence</strong>, and it's the reason this entire family of models is called <strong>Recurrent Neural Networks (RNNs)</strong>.</p>
+  </div>
+</section>
+<!-- ================= 03. THE RECURRENCE RELATION ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">03 · Formalizing the Recurrence</div>
+    <h2 class="title">One cell, drawn two equivalent ways</h2>
+    <p class="lede">The RNN diagram gets drawn in two forms that confused me at first because they look so different — but they're the exact same computation.</p>
+
+    <div class="twocol">
+      <div class="fig-card" style="background:#0B0D12; border:1px solid rgba(255,255,255,0.08);">
+        <div class="demo-label" style="color:#FFB454;">the loop form</div>
+        <svg viewBox="0 0 260 220" xmlns="http://www.w3.org/2000/svg">
+          <rect x="70" y="70" width="120" height="80" rx="8" fill="#181C26" stroke="#FFB454" stroke-width="1.5"/>
+          <text x="130" y="115" text-anchor="middle" font-family="Space Grotesk" font-size="14" fill="#FFB454">recurrent cell</text>
+          <path d="M 60 90 Q 20 110 60 130" fill="none" stroke="#5C7A99" stroke-width="2" marker-end="url(#arrowH)"/>
+          <text x="30" y="112" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#5C7A99">hₜ</text>
+          <circle cx="130" cy="185" r="16" fill="#33425a"/><text x="130" y="190" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#B9BFCC">xₜ</text>
+          <line x1="130" y1="169" x2="130" y2="152" stroke="#5C7A99" stroke-width="2" marker-end="url(#arrowH)"/>
+          <circle cx="130" cy="35" r="15" fill="#5FAE82" opacity="0.85"/><text x="130" y="40" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#0B0D12">ŷₜ</text>
+          <line x1="130" y1="70" x2="130" y2="52" stroke="#5FAE82" stroke-width="2" marker-end="url(#arrowH)"/>
+        </svg>
+      </div>
+      <div class="fig-card" style="background:#0B0D12; border:1px solid rgba(255,255,255,0.08);">
+        <div class="demo-label" style="color:#5C7A99;">the unrolled form</div>
+        <svg viewBox="0 0 260 220" xmlns="http://www.w3.org/2000/svg">
+          <rect x="20" y="80" width="60" height="60" rx="6" fill="#181C26" stroke="#FFB454"/>
+          <rect x="100" y="80" width="60" height="60" rx="6" fill="#181C26" stroke="#FFB454"/>
+          <rect x="180" y="80" width="60" height="60" rx="6" fill="#181C26" stroke="#FFB454"/>
+          <text x="50" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#FFB454">t=0</text>
+          <text x="130" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#FFB454">t=1</text>
+          <text x="210" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#FFB454">t=2</text>
+          <line x1="80" y1="110" x2="98" y2="110" stroke="#5C7A99" stroke-width="2" marker-end="url(#arrowH)"/>
+          <line x1="160" y1="110" x2="178" y2="110" stroke="#5C7A99" stroke-width="2" marker-end="url(#arrowH)"/>
+          <circle cx="50" cy="180" r="12" fill="#33425a"/><text x="50" y="184" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#B9BFCC">x₀</text>
+          <circle cx="130" cy="180" r="12" fill="#33425a"/><text x="130" y="184" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#B9BFCC">x₁</text>
+          <circle cx="210" cy="180" r="12" fill="#33425a"/><text x="210" y="184" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#B9BFCC">x₂</text>
+          <line x1="50" y1="168" x2="50" y2="142" stroke="#5C7A99" stroke-width="2" marker-end="url(#arrowH)"/>
+          <line x1="130" y1="168" x2="130" y2="142" stroke="#5C7A99" stroke-width="2" marker-end="url(#arrowH)"/>
+          <line x1="210" y1="168" x2="210" y2="142" stroke="#5C7A99" stroke-width="2" marker-end="url(#arrowH)"/>
+          <circle cx="50" cy="45" r="12" fill="#5FAE82" opacity="0.85"/><text x="50" y="49" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#0B0D12">ŷ₀</text>
+          <circle cx="130" cy="45" r="12" fill="#5FAE82" opacity="0.85"/><text x="130" y="49" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#0B0D12">ŷ₁</text>
+          <circle cx="210" cy="45" r="12" fill="#5FAE82" opacity="0.85"/><text x="210" y="49" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#0B0D12">ŷ₂</text>
+          <line x1="50" y1="80" x2="50" y2="58" stroke="#5FAE82" stroke-width="2" marker-end="url(#arrowH)"/>
+          <line x1="130" y1="80" x2="130" y2="58" stroke="#5FAE82" stroke-width="2" marker-end="url(#arrowH)"/>
+          <line x1="210" y1="80" x2="210" y2="58" stroke="#5FAE82" stroke-width="2" marker-end="url(#arrowH)"/>
+        </svg>
+      </div>
+    </div>
+    <p style="font-size:14px; color:#6b7280; margin-top:6px;">FIG 3 — same computation, two drawings. Left: the loop shows h being fed back into the same cell. Right: "unrolling" that loop across time steps makes explicit that it's still one cell, called t+1 times, just laid out left to right for readability.</p>
+
+    <p>Formally, this is the <strong>recurrence relation</strong> — the rule that defines how the state update happens at every unit of time:</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ h_t = f_W(x_t, h_{t-1}) \]
+      <div style="display:flex; justify-content:center; gap:32px; margin-top:10px; font-size:13px; font-family:'JetBrains Mono',monospace;">
+        <span style="color:#5FAE82;">cell state</span>
+        <span style="color:#FFB454;">function, weights W</span>
+        <span style="color:#5C7A99;">input</span>
+        <span style="color:#E7714F;">old state</span>
+      </div>
+    </div>
+
+    <div class="def">
+      <span class="term">The detail that makes this work</span>
+      We use <em>the same function and the exact same set of weights W at every time step</em>. This is not a new network being created per word or per frame — it's one function, applied repeatedly, that happens to take a different pair of (input, previous state) each time it's called. This is why RNNs can process sequences of any length with a fixed number of parameters, and it's precisely analogous to parameter sharing in CNNs — same weights, reapplied everywhere, just across time instead of across space.
+    </div>
+
+    <h3 class="sub-title">The pseudocode version</h3>
+    <p>The lecture walks through this with a next-word-prediction example, and seeing it as code makes the recurrence click faster than any diagram:</p>
+
+    <div class="fig-card" style="background:#0B0D12; border:1px solid rgba(255,255,255,0.08); font-family:'JetBrains Mono',monospace; font-size:13.5px; color:#C9CDD6; line-height:1.9;">
+<pre style="margin:0; white-space:pre-wrap;">my_rnn = RNN()
+hidden_state = [0, 0, 0, 0]
+
+sentence = ["I", "love", "recurrent", "neural"]
+
+<span style="color:#FFB454;">for</span> word <span style="color:#FFB454;">in</span> sentence:
+    prediction, hidden_state = my_rnn(word, hidden_state)
+
+next_word_prediction = prediction
+<span style="color:#5FAE82;"># >>> "networks!"</span></pre>
+    </div>
+    <p style="font-size:14.5px; color:#6b7280; margin-top:10px;">Notice the hidden state is initialized once, then threaded through the loop — each call both produces a prediction and updates the state that gets passed into the <em>next</em> call. By the time the loop reaches the last word, the hidden state has accumulated information from every word that came before it.</p>
+  </div>
+</section>
+<!-- ================= 04. THE STATE UPDATE MATH ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">04 · The Actual Math</div>
+    <h2 class="title">What f_W is actually computing</h2>
+    <p class="lede">It looks intimidating with all the subscripts, but it's the same operation you already know from lecture one — weighted sum, then a nonlinearity — just applied to two things instead of one.</p>
+
+    <p>Two things happen at every time step. First, the hidden state is updated using both the previous state and the current input:</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ h_t = \tanh\left(W_{hh}^T h_{t-1} + W_{xh}^T x_t\right) \]
+    </div>
+
+    <p>Break that down: <span class="mono">W_hh</span> is a weight matrix applied to the previous hidden state, <span class="mono">W_xh</span> is a separate weight matrix applied to the current input. These get multiplied against their respective vectors, <strong>summed together</strong>, and passed through <span class="mono">tanh</span> — the same kind of nonlinear activation from lecture one, just hyperbolic tangent instead of sigmoid or ReLU here. That sum-then-nonlinearity pattern is exactly the perceptron operation from Section 02, just now taking two weighted inputs instead of one.</p>
+
+    <p>Second, the output prediction is produced by transforming that hidden state through one more weight matrix:</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ \hat{y}_t = W_{hy}^T h_t \]
+    </div>
+
+    <div class="def">
+      <span class="term">Three weight matrices, all learned</span>
+      <span class="mono">W_xh</span> (input → hidden), <span class="mono">W_hh</span> (hidden → hidden), and <span class="mono">W_hy</span> (hidden → output) are initialized randomly and updated through gradient descent — the same training process from lecture one. Nothing about these matrices is hand-designed; the network learns what information from the input and the past state is worth keeping, purely by minimizing the loss.
+    </div>
+
+    <p>The Stanford CS230 cheatsheet writes this same relationship with slightly different notation — activation <span class="mono">a</span> instead of hidden state <span class="mono">h</span>, and separate activation functions <span class="mono">g₁, g₂</span> for the two steps — but it's the identical structure:</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ a^{\langle t \rangle} = g_1(W_{aa}\,a^{\langle t-1 \rangle} + W_{ax}\,x^{\langle t \rangle} + b_a) \quad\text{and}\quad y^{\langle t \rangle} = g_2(W_{ya}\,a^{\langle t \rangle} + b_y) \]
+    </div>
+    <p style="font-size:14.5px; color:#B9BFCC;">Different textbooks, different letters for the same three matrices and the same two-step update. Once you've seen it written one way, the other notation stops being confusing — it's worth getting used to both since papers switch between them constantly.</p>
+  </div>
+</section>
+<!-- ================= 05. COMPUTATIONAL GRAPH ACROSS TIME ================= -->
+<section class="paper">
+  <div class="wrap-wide">
+    <div class="kicker">05 · Unrolling and the Loss</div>
+    <h2 class="title">One forward pass, many losses, one sum</h2>
+    <p class="lede">Because the network makes a prediction at every single time step, it also incurs a loss at every single time step. Training an RNN means adding all of those up.</p>
+
+    <figure>
+      <div class="fig-card" style="background:#0B0D12; border:1px solid rgba(255,255,255,0.08);">
+        <svg viewBox="0 0 680 260" xmlns="http://www.w3.org/2000/svg">
+          <text x="60" y="20" font-family="JetBrains Mono" font-size="10" fill="#8B92A1">forward pass →</text>
+          <!-- cells -->
+          <rect x="40" y="130" width="70" height="60" rx="6" fill="#181C26" stroke="#FFB454"/>
+          <rect x="150" y="130" width="70" height="60" rx="6" fill="#181C26" stroke="#FFB454"/>
+          <rect x="260" y="130" width="70" height="60" rx="6" fill="#181C26" stroke="#FFB454"/>
+          <text x="400" y="165" text-anchor="middle" font-family="JetBrains Mono" font-size="16" fill="#6b7280">···</text>
+          <rect x="470" y="130" width="70" height="60" rx="6" fill="#181C26" stroke="#FFB454"/>
+          <line x1="110" y1="160" x2="148" y2="160" stroke="#5C7A99" stroke-width="1.5" marker-end="url(#arrowH)"/>
+          <line x1="220" y1="160" x2="258" y2="160" stroke="#5C7A99" stroke-width="1.5" marker-end="url(#arrowH)"/>
+          <line x1="330" y1="160" x2="378" y2="160" stroke="#5C7A99" stroke-width="1.5"/>
+          <line x1="422" y1="160" x2="468" y2="160" stroke="#5C7A99" stroke-width="1.5" marker-end="url(#arrowH)"/>
+          <text x="75" y="122" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5C7A99">Wxh</text>
+          <text x="185" y="122" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5C7A99">Wxh</text>
+          <text x="295" y="122" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5C7A99">Wxh</text>
+          <text x="505" y="122" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5C7A99">Wxh</text>
+          <!-- inputs -->
+          <circle cx="75" cy="230" r="14" fill="#33425a"/><text x="75" y="234" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#B9BFCC">x₀</text>
+          <circle cx="185" cy="230" r="14" fill="#33425a"/><text x="185" y="234" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#B9BFCC">x₁</text>
+          <circle cx="295" cy="230" r="14" fill="#33425a"/><text x="295" y="234" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#B9BFCC">x₂</text>
+          <circle cx="505" cy="230" r="14" fill="#33425a"/><text x="505" y="234" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#B9BFCC">xₜ</text>
+          <line x1="75" y1="216" x2="75" y2="192" stroke="#5C7A99" stroke-width="1.5" marker-end="url(#arrowH)"/>
+          <line x1="185" y1="216" x2="185" y2="192" stroke="#5C7A99" stroke-width="1.5" marker-end="url(#arrowH)"/>
+          <line x1="295" y1="216" x2="295" y2="192" stroke="#5C7A99" stroke-width="1.5" marker-end="url(#arrowH)"/>
+          <line x1="505" y1="216" x2="505" y2="192" stroke="#5C7A99" stroke-width="1.5" marker-end="url(#arrowH)"/>
+          <!-- outputs + losses -->
+          <circle cx="75" cy="90" r="13" fill="#5FAE82" opacity="0.85"/><text x="75" y="94" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#0B0D12">ŷ₀</text>
+          <line x1="75" y1="128" x2="75" y2="103" stroke="#5FAE82" stroke-width="1.5" marker-end="url(#arrowH)"/>
+          <circle cx="185" cy="90" r="13" fill="#5FAE82" opacity="0.85"/><text x="185" y="94" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#0B0D12">ŷ₁</text>
+          <line x1="185" y1="128" x2="185" y2="103" stroke="#5FAE82" stroke-width="1.5" marker-end="url(#arrowH)"/>
+          <circle cx="295" cy="90" r="13" fill="#5FAE82" opacity="0.85"/><text x="295" y="94" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#0B0D12">ŷ₂</text>
+          <line x1="295" y1="128" x2="295" y2="103" stroke="#5FAE82" stroke-width="1.5" marker-end="url(#arrowH)"/>
+          <circle cx="505" cy="90" r="13" fill="#5FAE82" opacity="0.85"/><text x="505" y="94" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#0B0D12">ŷₜ</text>
+          <line x1="505" y1="128" x2="505" y2="103" stroke="#5FAE82" stroke-width="1.5" marker-end="url(#arrowH)"/>
+
+          <rect x="55" y="40" width="40" height="26" rx="4" fill="#E7714F" opacity="0.85"/><text x="75" y="58" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#0B0D12">L₀</text>
+          <rect x="165" y="40" width="40" height="26" rx="4" fill="#E7714F" opacity="0.85"/><text x="185" y="58" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#0B0D12">L₁</text>
+          <rect x="275" y="40" width="40" height="26" rx="4" fill="#E7714F" opacity="0.85"/><text x="295" y="58" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#0B0D12">L₂</text>
+          <rect x="485" y="40" width="40" height="26" rx="4" fill="#E7714F" opacity="0.85"/><text x="505" y="58" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#0B0D12">Lₜ</text>
+
+          <rect x="580" y="20" width="70" height="60" rx="8" fill="#E7714F"/>
+          <text x="615" y="55" text-anchor="middle" font-family="Space Grotesk" font-size="18" fill="#0B0D12">L</text>
+          <path d="M 95 50 Q 300 5 578 45" fill="none" stroke="#E7714F" stroke-width="1.2" opacity="0.6"/>
+          <path d="M 205 50 Q 350 15 578 48" fill="none" stroke="#E7714F" stroke-width="1.2" opacity="0.6"/>
+          <path d="M 315 50 Q 420 25 578 52" fill="none" stroke="#E7714F" stroke-width="1.2" opacity="0.6"/>
+          <path d="M 525 50 Q 555 48 578 55" fill="none" stroke="#E7714F" stroke-width="1.2" opacity="0.6"/>
+        </svg>
+      </div>
+      <figcaption>FIG 4 — the RNN unrolled across every time step in the input. Each step produces its own prediction and its own loss. All the per-step losses feed into one total loss L, which is what gradient descent actually minimizes.</figcaption>
+    </figure>
+
+    <div class="math-box" style="text-align:center;">
+      \[ \mathcal{L} = \sum_{t=1}^{T_y} \mathcal{L}(\hat{y}^{\langle t \rangle}, y^{\langle t \rangle}) \]
+    </div>
+
+    <p>This matters for how gradients flow during training too. Backpropagation on an unrolled RNN is often called <strong>backpropagation through time (BPTT)</strong> — at time step <span class="mono">T</span>, the gradient of the total loss with respect to a weight matrix <span class="mono">W</span> has to account for that weight's contribution at every earlier time step, not just the current one:</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ \frac{\partial \mathcal{L}^{(T)}}{\partial W} = \sum_{t=1}^{T} \frac{\partial \mathcal{L}^{(T)}}{\partial W}\bigg|_{(t)} \]
+    </div>
+    <p style="font-size:14.5px; color:#6b7280;">Since the same <span class="mono">W</span> is reused at every step, its gradient is a sum across all the time steps it participated in — one weight matrix, but its error signal is being accumulated from everywhere it was used.</p>
+  </div>
+</section>
+<!-- ================= 06. SEQUENCE MODELING APPLICATIONS ================= -->
+<section class="dark">
+  <div class="wrap-wide">
+    <div class="kicker">06 · What You Can Actually Build With This</div>
+    <h2 class="title">One to one is the exception. Sequences are everywhere else.</h2>
+    <p class="lede">Once you have a network that can take an arbitrary-length sequence and carry state through it, four distinct problem shapes open up — and almost every interesting NLP or time-series task is one of these four.</p>
+
+    <table>
+      <tr><th>Shape</th><th>Task type</th><th>Example</th></tr>
+      <tr><td class="mono">1 → 1</td><td>Binary classification</td><td>"Will I pass this class?" — student features in, pass/fail out</td></tr>
+      <tr><td class="mono">many → 1</td><td>Sequence classification</td><td>Sentiment classification — a whole tweet in, one emotion label out</td></tr>
+      <tr><td class="mono">1 → many</td><td>Sequence generation</td><td>Image captioning — one image in, a sentence describing it out</td></tr>
+      <tr><td class="mono">many → many</td><td>Sequence transduction</td><td>Machine translation — a sentence in one language in, a sentence in another out</td></tr>
+    </table>
+
+    <p>The many-to-one case is the most direct extension of what we've already built: run the RNN across every word in the input, and only use the very last hidden state's output as the final prediction — by the last time step, that hidden state has accumulated context from the entire sequence.</p>
+
+    <p>One-to-many flips this: a single input (an image, say) sets the initial hidden state, and the network then generates output tokens one at a time, each one feeding back in as the "input" for the next step — this is exactly how caption generation and music generation work.</p>
+
+    <p>Many-to-many is the hardest and most general case, because the input length and output length don't even have to match — translating a five-word English sentence might need seven words in French. This mismatch is exactly why later architectures (encoder-decoder models, and eventually attention and transformers) exist: a plain RNN forces one output per input step, which doesn't hold once <span class="mono">T_x ≠ T_y</span>.</p>
+
+    <div class="aside">
+      <span class="term">Where this connects to the rest of my roadmap</span>
+      This is also precisely the many-to-many, <span class="mono">Tₓ ≠ Tᵧ</span> case from the encoder-decoder transformer I'm training on English→French right now. The encoder reads the whole source sentence into a context vector (conceptually similar to a final RNN hidden state), and the decoder generates the target sentence one token at a time. RNNs are the intuitive predecessor to that architecture — transformers replace the recurrence with attention, but the underlying "sequence in, sequence out" problem shape is identical.
+    </div>
+  </div>
+</section>
+<!-- ================= 07. THE VANISHING GRADIENT PROBLEM ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">07 · The Catch</div>
+    <h2 class="title">A plain RNN forgets faster than you'd expect</h2>
+    <p class="lede">The recurrence relation solves the "no memory" problem in principle. In practice, vanilla RNNs are bad at remembering anything more than a handful of steps back, and the reason is a direct mechanical consequence of backpropagation through time.</p>
+
+    <p>Remember that the gradient of the total loss with respect to a weight has to flow backward through every time step it touched. Each one of those steps involves multiplying by the same matrix <span class="mono">W_hh</span> again. Multiply a value less than 1 by itself dozens of times, and it shrinks toward zero — that's a <strong>vanishing gradient</strong>. Multiply a value greater than 1 by itself dozens of times, and it blows up — an <strong>exploding gradient</strong>. Both happen because of this repeated multiplicative structure, and both get worse the longer the sequence is.</p>
+
+    <table>
+      <tr><th>Advantages</th><th>Drawbacks</th></tr>
+      <tr><td>Can process input of any length</td><td>Computation is inherently slow (sequential, can't parallelize across time)</td></tr>
+      <tr><td>Model size doesn't grow with input length</td><td>Difficulty accessing information from a long time ago</td></tr>
+      <tr><td>Computation accounts for historical information</td><td>Cannot consider any future input for the current state</td></tr>
+      <tr><td>Weights are shared across time</td><td>Susceptible to vanishing / exploding gradients</td></tr>
+    </table>
+
+    <p>In practice this means: a vanilla RNN can usually pick up on dependencies a few words back just fine. Ask it to connect a pronoun to a noun that appeared thirty words earlier in a paragraph, and the gradient signal carrying that dependency has been multiplied by <span class="mono">W_hh</span> thirty times over — by then it's typically vanished into numerical noise, and the network has effectively no way to learn that connection.</p>
+
+    <div class="def">
+      <span class="term">Gradient clipping — the partial fix for exploding gradients</span>
+      One practical technique: cap the gradient's norm at some threshold <span class="mono">C</span> before applying the update. If the gradient's magnitude exceeds <span class="mono">C</span>, rescale it down to <span class="mono">C</span>. This directly controls exploding gradients — it does nothing for vanishing gradients, though. The real fix for vanishing gradients is architectural, not a training trick, which is exactly why gated units like LSTM and GRU exist.
+    </div>
+
+    <div class="math-box" style="text-align:center; font-size:14px;">
+      \[ \Gamma = \sigma(Wx^{\langle t \rangle} + Ua^{\langle t-1 \rangle} + b) \]
+      <span style="font-size:13px; color:#8B92A1;">the general form of a "gate" — a sigmoid-squashed value between 0 and 1 that controls how much information passes through</span>
+    </div>
+  </div>
+</section>
+<!-- ================= 08. GATED UNITS ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">08 · The Fix — A Preview</div>
+    <h2 class="title">GRU and LSTM: give the network a way to choose what to keep</h2>
+    <p class="lede">This wasn't the focus of the lecture I just watched, but the Stanford cheatsheet lays out the fix cleanly enough that it's worth flagging here before the next lecture goes deeper on it — the fix for vanishing gradients is to add gates.</p>
+
+    <p>A <strong>gate</strong> is just a sigmoid-squashed value between 0 and 1, learned from the current input and the previous state, that controls how much of some signal is allowed through. Instead of forcing the hidden state to be entirely overwritten at every step (which is what a vanilla RNN does), gated architectures let the network learn to <em>selectively</em> keep old information or let new information in.</p>
+
+    <table>
+      <tr><th>Gate</th><th>Role</th><th>Used in</th></tr>
+      <tr><td>Update gate Γᵤ</td><td>How much should the past matter right now?</td><td>GRU, LSTM</td></tr>
+      <tr><td>Relevance gate Γᵣ</td><td>Should previous information be dropped?</td><td>GRU, LSTM</td></tr>
+      <tr><td>Forget gate Γ_f</td><td>Should the cell state be erased?</td><td>LSTM</td></tr>
+      <tr><td>Output gate Γₒ</td><td>How much of the cell should be revealed?</td><td>LSTM</td></tr>
+    </table>
+
+    <p>LSTM (Long Short-Term Memory) is, in this framing, a generalization of GRU — it has a separate cell state <span class="mono">c⟨t⟩</span> in addition to the hidden state, and uses all four gates above to carefully control what gets written into that cell, what gets forgotten, and what gets exposed as output. This is the direct architectural answer to the vanishing gradient problem: the cell state has a much more direct, mostly-additive path across time steps, so gradients don't have to survive dozens of consecutive matrix multiplications to reach far back in the sequence.</p>
+
+    <div class="aside">
+      <span class="term">Note to self before the next lecture</span>
+      I haven't watched the LSTM/GRU-specific lecture yet, so I'm deliberately not going deep on the gate equations here — just flagging that they exist and what problem they solve, so the next build (probably implementing an LSTM cell from scratch) has this context already in place.
+    </div>
+  </div>
+</section>
+<!-- ================= 09. BIDIRECTIONAL AND DEEP RNNs ================= -->
+<section class="paper">
+  <div class="wrap-wide">
+    <div class="kicker">09 · Two Ways To Make The Architecture Deeper</div>
+    <h2 class="title">What if one direction, one layer, isn't enough?</h2>
+    <p class="lede">The vanilla RNN only ever looks backward — at time <span class="mono">t</span> it knows everything before it, nothing after. And it only has one layer of recurrence. Two straightforward variants relax each of those constraints.</p>
+
+    <div class="twocol">
+      <div class="fig-card light">
+        <div class="demo-label" style="color:#B5662E;">Bidirectional (BRNN)</div>
+        <svg viewBox="0 0 260 200" xmlns="http://www.w3.org/2000/svg">
+          <rect x="30" y="90" width="50" height="40" rx="5" fill="#5C7A99" opacity="0.85"/>
+          <rect x="105" y="90" width="50" height="40" rx="5" fill="#5C7A99" opacity="0.85"/>
+          <rect x="180" y="90" width="50" height="40" rx="5" fill="#5C7A99" opacity="0.85"/>
+          <line x1="80" y1="103" x2="103" y2="103" stroke="#1B1F27" stroke-width="1.5" marker-end="url(#arrowH)"/>
+          <line x1="155" y1="103" x2="178" y2="103" stroke="#1B1F27" stroke-width="1.5" marker-end="url(#arrowH)"/>
+          <line x1="103" y1="117" x2="80" y2="117" stroke="#8B92A1" stroke-width="1.5" marker-end="url(#arrowH)"/>
+          <line x1="178" y1="117" x2="155" y2="117" stroke="#8B92A1" stroke-width="1.5" marker-end="url(#arrowH)"/>
+          <text x="55" y="80" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#6b7280">x⟨1⟩</text>
+          <text x="130" y="80" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#6b7280">x⟨2⟩</text>
+          <text x="205" y="80" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#6b7280">x⟨T⟩</text>
+          <circle cx="55" cy="45" r="12" fill="#E7714F" opacity="0.85"/><text x="55" y="49" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#fff">ŷ₁</text>
+          <circle cx="130" cy="45" r="12" fill="#E7714F" opacity="0.85"/><text x="130" y="49" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#fff">ŷ₂</text>
+          <circle cx="205" cy="45" r="12" fill="#E7714F" opacity="0.85"/><text x="205" y="49" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#fff">ŷT</text>
+          <text x="130" y="165" text-anchor="middle" font-family="Inter" font-size="11" fill="#6b7280">each output sees both past AND future context</text>
+        </svg>
+      </div>
+      <div class="fig-card light">
+        <div class="demo-label" style="color:#B5662E;">Deep (DRNN)</div>
+        <svg viewBox="0 0 260 200" xmlns="http://www.w3.org/2000/svg">
+          <rect x="30" y="130" width="46" height="34" rx="5" fill="#5FAE82" opacity="0.85"/>
+          <rect x="100" y="130" width="46" height="34" rx="5" fill="#5FAE82" opacity="0.85"/>
+          <rect x="170" y="130" width="46" height="34" rx="5" fill="#5FAE82" opacity="0.85"/>
+          <rect x="30" y="85" width="46" height="34" rx="5" fill="#5C7A99" opacity="0.85"/>
+          <rect x="100" y="85" width="46" height="34" rx="5" fill="#5C7A99" opacity="0.85"/>
+          <rect x="170" y="85" width="46" height="34" rx="5" fill="#5C7A99" opacity="0.85"/>
+          <rect x="30" y="40" width="46" height="34" rx="5" fill="#FFB454" opacity="0.9"/>
+          <rect x="100" y="40" width="46" height="34" rx="5" fill="#FFB454" opacity="0.9"/>
+          <rect x="170" y="40" width="46" height="34" rx="5" fill="#FFB454" opacity="0.9"/>
+          <line x1="76" y1="147" x2="98" y2="147" stroke="#1B1F27" stroke-width="1.2" marker-end="url(#arrowH)"/>
+          <line x1="146" y1="147" x2="168" y2="147" stroke="#1B1F27" stroke-width="1.2" marker-end="url(#arrowH)"/>
+          <line x1="76" y1="102" x2="98" y2="102" stroke="#1B1F27" stroke-width="1.2" marker-end="url(#arrowH)"/>
+          <line x1="146" y1="102" x2="168" y2="102" stroke="#1B1F27" stroke-width="1.2" marker-end="url(#arrowH)"/>
+          <line x1="76" y1="57" x2="98" y2="57" stroke="#1B1F27" stroke-width="1.2" marker-end="url(#arrowH)"/>
+          <line x1="146" y1="57" x2="168" y2="57" stroke="#1B1F27" stroke-width="1.2" marker-end="url(#arrowH)"/>
+          <line x1="53" y1="130" x2="53" y2="119" stroke="#8B92A1" stroke-width="1.2" marker-end="url(#arrowH)"/>
+          <line x1="123" y1="130" x2="123" y2="119" stroke="#8B92A1" stroke-width="1.2" marker-end="url(#arrowH)"/>
+          <line x1="193" y1="130" x2="193" y2="119" stroke="#8B92A1" stroke-width="1.2" marker-end="url(#arrowH)"/>
+          <line x1="53" y1="85" x2="53" y2="74" stroke="#8B92A1" stroke-width="1.2" marker-end="url(#arrowH)"/>
+          <line x1="123" y1="85" x2="123" y2="74" stroke="#8B92A1" stroke-width="1.2" marker-end="url(#arrowH)"/>
+          <line x1="193" y1="85" x2="193" y2="74" stroke="#8B92A1" stroke-width="1.2" marker-end="url(#arrowH)"/>
+          <text x="130" y="185" text-anchor="middle" font-family="Inter" font-size="11" fill="#6b7280">stacked recurrent layers — each layer's output feeds the next</text>
+        </svg>
+      </div>
+    </div>
+    <p style="font-size:14px; color:#6b7280; margin-top:8px;">FIG 5 — <strong>Bidirectional</strong> runs two RNNs over the same sequence, one forward and one backward, and combines both directions at each time step so predictions have access to future context too. <strong>Deep</strong> just stacks multiple recurrent layers on top of each other, the same "add more layers" idea from feedforward networks, applied here.</p>
+
+    <div class="aside">
+      <span class="term">Where bidirectional matters vs. where it doesn't</span>
+      BRNNs only make sense when you have the <em>entire</em> sequence available up front — like classifying a complete sentence's sentiment, or tagging named entities in a finished document. They don't work for anything that has to generate output as it goes (like live speech transcription or next-word prediction while typing), because there's no "future" to look at yet.
+    </div>
+  </div>
+</section>
+<!-- ================= 10. CHEAT SHEET ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">10 · For When You Need The Short Version</div>
+    <h2 class="title">The cheat sheet</h2>
+
+    <table>
+      <tr><th>Concept</th><th>What it means</th><th>Formula / key fact</th></tr>
+      <tr><td>Recurrence relation</td><td>How the hidden state updates each step</td><td><span class="mono">h_t = f_W(x_t, h_{t-1})</span></td></tr>
+      <tr><td>Hidden state update</td><td>Weighted sum of past state + current input, squashed by tanh</td><td><span class="mono">h_t = tanh(Whh·h_{t-1} + Wxh·x_t)</span></td></tr>
+      <tr><td>Output prediction</td><td>Hidden state transformed to output space</td><td><span class="mono">ŷ_t = Why·h_t</span></td></tr>
+      <tr><td>Weight sharing</td><td>Same W's reused at every time step</td><td>fixed parameter count, any sequence length</td></tr>
+      <tr><td>Total loss</td><td>Sum of per-timestep losses</td><td><span class="mono">L = Σ L(ŷ_t, y_t)</span></td></tr>
+      <tr><td>BPTT</td><td>Gradients flow backward through every time step</td><td>repeated multiplication by Whh → vanishing/exploding gradients</td></tr>
+      <tr><td>Gradient clipping</td><td>Cap gradient norm to fix exploding gradients</td><td>doesn't fix vanishing gradients</td></tr>
+      <tr><td>LSTM / GRU</td><td>Gated architectures that fix vanishing gradients</td><td>update, relevance, forget, output gates</td></tr>
+    </table>
+
+    <h3 class="sub-title">If you forget everything else, keep these</h3>
+    <ul class="clean">
+      <li><strong>Recurrence = one network, called repeatedly, threading a hidden state forward.</strong> Not a new network per time step.</li>
+      <li><strong>Weights are shared across every time step.</strong> This is what lets an RNN handle sequences of any length without the parameter count growing.</li>
+      <li><strong>The loss is summed across every time step</strong>, not just the last one — every prediction the model makes along the way contributes to the gradient.</li>
+      <li><strong>Vanilla RNNs are bad at long-range dependencies.</strong> The gradient has to survive repeated multiplication by the same matrix across every intervening time step — this is why "what happened 30 words ago" is hard for a plain RNN but usually fine for an LSTM.</li>
+      <li><strong>Bidirectional needs the whole sequence up front.</strong> Great for classification tasks on complete text, useless for anything generated live, token by token.</li>
+      <li><strong>Many-to-many with Tₓ ≠ Tᵧ is the hard case</strong> — it's exactly what motivates encoder-decoder architectures, which is the natural next step after this.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= FOOTER ================= -->
+<footer>
+  <div class="wrap">
+    <hr class="thin">
+    <p style="color:#C9CDD6; font-size:15.5px; margin-bottom:18px;">
+      Built from two sources, read in this order. <strong>MIT 6.S191 Introduction to Deep Learning, Lecture 2</strong> (Ava, 2026) — the ball-trajectory motivation, the perceptron-to-recurrence build-up, the recurrence relation, the pseudocode intuition, the computational graph across time. <strong>Stanford CS230 — Recurrent Neural Networks Cheatsheet</strong> (Afshine & Shervine Amidi) — the advantages/drawbacks table, vanishing/exploding gradients, gradient clipping, the gate types, and the bidirectional/deep RNN variants. All reorganized and written in my own words so it actually sticks.
+    </p>
+    <p style="color:#8B92A1; font-size:14px;">One suggestion before moving on: implement the recurrence relation from scratch in NumPy — <span style="font-family:'JetBrains Mono',monospace; color:var(--amber);">h_t = np.tanh(Whh @ h_prev + Wxh @ x_t)</span> — on a toy character sequence before touching <span class="mono">nn.RNN</span>. The mini-GPT already builds on this idea; seeing the exact same recurrence written by hand makes the jump to attention feel like a continuation, not a totally new topic.</p>
+    <div class="seriesnav" style="margin-top:28px;">
+      <a href="https://www.youtube.com/watch?v=aNw_-DYjaVE" target="_blank">MIT 6.S191 — Recurrent Neural Networks Lecture</a>
+      <a href="https://introtodeeplearning.com" target="_blank">introtodeeplearning.com</a>
+      <a href="https://web.stanford.edu/~shervine/teaching/cs-230/cheatsheet-recurrent-neural-networks/" target="_blank">CS230 — RNN Cheatsheet</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
