@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CLIP — Learning Transferable Visual Models From Natural Language Supervision (Explained Properly)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js"></script>
+<style>
+  :root{
+    --ink:#1B1F27;
+    --paper:#F6F3EC;
+    --paper-dim:#ECE7DA;
+    --dark:#11141B;
+    --dark-2:#181C26;
+    --amber:#FFB454;
+    --amber-soft:#FFD9A0;
+    --wire-cool:#5C7A99;
+    --wire-cool-dim:#33425a;
+    --muted:#8B92A1;
+    --muted-dark:#6b7280;
+    --red:#E7714F;
+    --green:#5FAE82;
+    --rule: rgba(255,255,255,0.08);
+    --rule-dark: rgba(20,20,20,0.10);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    font-size:17px;
+    line-height:1.72;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:600;
+    letter-spacing:-0.01em;
+    margin:0;
+  }
+  .mono{font-family:'JetBrains Mono',monospace;}
+  a{color:inherit;}
+  p{margin:0 0 1.15em 0;}
+  .wrap{max-width:760px; margin:0 auto; padding:0 28px;}
+  .wrap-wide{max-width:920px; margin:0 auto; padding:0 28px;}
+
+  /* ===== HERO ===== */
+  .hero{
+    background:radial-gradient(ellipse 900px 500px at 50% -10%, #1d2433 0%, var(--dark) 60%);
+    color:var(--paper);
+    padding:104px 0 84px;
+    position:relative;
+    overflow:hidden;
+  }
+  .hero .eyebrow{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--amber);
+    margin-bottom:22px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--amber); box-shadow:0 0 8px 2px var(--amber);}
+  .hero h1{
+    font-size:50px;
+    line-height:1.1;
+    color:#F4F1E8;
+    max-width:680px;
+  }
+  .hero h1 em{ font-style:normal; color:var(--amber); }
+  .hero .sub{
+    margin-top:24px;
+    font-size:18.5px;
+    color:#B9BFCC;
+    max-width:560px;
+  }
+  @media (max-width:640px){ .hero{padding:80px 0 60px;} .hero h1{font-size:34px;} }
+
+  section{padding:80px 0;}
+  section.dark{background:var(--dark); color:#E7E5DC;}
+  section.dark h2, section.dark h3{color:#F4F1E8;}
+  section.paper{background:var(--paper);}
+  section.paper-dim{background:var(--paper-dim);}
+  .kicker{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    letter-spacing:0.13em;
+    text-transform:uppercase;
+    color:var(--amber);
+  }
+  section.paper .kicker, section.paper-dim .kicker{ color:#B5662E; }
+  h2.title{font-size:33px; margin-top:10px; margin-bottom:26px;}
+  h3.sub-title{font-size:21px; margin-top:42px; margin-bottom:14px;}
+  .lede{font-size:19px; color:var(--muted-dark); max-width:620px;}
+  section.dark .lede{color:var(--muted);}
+
+  figure{margin:32px 0;}
+  figure svg{width:100%; height:auto; display:block;}
+  figure img{width:100%; height:auto; display:block; border-radius:8px;}
+  figcaption{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+    color:var(--muted-dark);
+    margin-top:12px;
+    padding-top:10px;
+    border-top:1px solid var(--rule-dark);
+  }
+  section.dark figcaption{color:var(--muted); border-top:1px solid var(--rule);}
+  .fig-card{ background:var(--dark); border-radius:14px; padding:30px 26px 18px; }
+  section.dark .fig-card{ background:#0B0D12; border:1px solid var(--rule); }
+  .fig-card.light{ background:#fff; border:1px solid #E3DECE; }
+  .fig-card.light figcaption{color:var(--muted-dark); border-top:1px solid #ECE6D6;}
+  .fig-card.plain{ background:#fff; border:1px solid #E3DECE; padding:14px; }
+
+  .def{
+    border-left:3px solid var(--amber);
+    background:rgba(255,180,84,0.07);
+    padding:16px 20px;
+    border-radius:0 8px 8px 0;
+    margin:24px 0;
+  }
+  .def .term{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+    color:#B5662E; display:block; margin-bottom:6px;
+  }
+  section.dark .def{background:rgba(255,180,84,0.10);}
+  section.dark .def .term{color:var(--amber);}
+
+  .aside{
+    border-left:3px solid var(--wire-cool);
+    background:rgba(92,122,153,0.07);
+    padding:16px 20px;
+    border-radius:0 8px 8px 0;
+    margin:24px 0;
+    font-size:15.5px;
+  }
+  .aside .term{
+    font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:0.08em; text-transform:uppercase;
+    color:#3d5670; display:block; margin-bottom:6px;
+  }
+  section.dark .aside{background:rgba(92,122,153,0.12);}
+  section.dark .aside .term{color:#9db7cf;}
+
+  .math-box{
+    background:#fff; border:1px solid #E3DECE; border-radius:10px;
+    padding:20px 24px; margin:22px 0; overflow-x:auto;
+  }
+  section.dark .math-box{background:#0B0D12; border-color:var(--rule);}
+
+  table{width:100%; border-collapse:collapse; margin:26px 0; font-size:15.5px;}
+  th,td{padding:12px 14px; text-align:left; border-bottom:1px solid var(--rule-dark);}
+  section.dark th, section.dark td{border-bottom:1px solid var(--rule);}
+  th{font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:0.07em; text-transform:uppercase; color:var(--muted-dark);}
+  section.dark th{color:var(--muted);}
+  td .mono{color:var(--amber);}
+  section.paper td .mono, section.paper-dim td .mono{color:#B5662E;}
+
+  ol.steps{padding-left:22px; margin:18px 0;}
+  ol.steps li{margin-bottom:8px;}
+
+  .seriesnav{display:flex; flex-wrap:wrap; gap:10px; margin-top:34px;}
+  .seriesnav a{
+    font-family:'JetBrains Mono',monospace; font-size:12.5px; padding:8px 14px;
+    border:1px solid var(--rule); border-radius:999px; text-decoration:none;
+    color:#C9CDD6; transition:border-color .2s, color .2s;
+  }
+  .seriesnav a:hover{border-color:var(--amber); color:var(--amber);}
+
+  footer{ background:var(--dark); color:var(--muted); padding:60px 0 50px; font-size:14.5px; }
+  footer a{color:var(--amber); text-decoration:none; border-bottom:1px solid rgba(255,180,84,0.3);}
+  hr.thin{border:none; border-top:1px solid var(--rule); margin:30px 0;}
+
+  ul.clean{padding-left:0; list-style:none; margin:18px 0;}
+  ul.clean li{padding-left:22px; position:relative; margin-bottom:10px;}
+  ul.clean li::before{
+    content:""; position:absolute; left:0; top:9px;
+    width:7px; height:7px; border-radius:50%;
+    background:var(--amber); box-shadow:0 0 6px 1px rgba(255,180,84,0.6);
+  }
+
+  .twocol{display:grid; grid-template-columns:1fr 1fr; gap:22px;}
+  @media (max-width:680px){.twocol{grid-template-columns:1fr;}}
+
+  .pulse{ animation: pulseGlow 2.6s ease-in-out infinite; }
+  @keyframes pulseGlow{ 0%,100%{ opacity:0.55; } 50%{ opacity:1; } }
+  @media (prefers-reduced-motion: reduce){ .pulse{animation:none;} }
+</style>
+</head>
+<body>
+
+<!-- ================= HERO ================= -->
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow"><span class="dot pulse"></span>MY NOTES ON CLIP, WRITTEN OUT PROPERLY</div>
+    <h1>Show it a photo and the sentence "a photo of a dog," and CLIP doesn't classify — it just checks whether the two <em>agree.</em> Do that 400 million times and classification falls out for free.</h1>
+    <p class="sub">I went through "Learning Transferable Visual Models From Natural Language Supervision" (Radford et al., OpenAI, 2021) line by line, and kept coming back to my own ViT and Transformer notes because CLIP is really just those two architectures, glued together by one very simple training trick. This is that trick, worked through properly.</p>
+
+    <figure style="margin-top:48px;">
+      <div class="fig-card" style="background:#0B0D12; border:1px solid var(--rule);">
+        <svg viewBox="0 0 620 220" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="13" text-anchor="middle">
+            <rect x="10" y="30" width="150" height="60" rx="8" fill="none" stroke="#5FAE82" stroke-width="1.4"/>
+            <text x="85" y="22" fill="#5FAE82" font-size="11">IMAGE</text>
+            <text x="85" y="65" fill="#E7E5DC">photo of a dog</text>
+
+            <rect x="10" y="130" width="150" height="60" rx="8" fill="none" stroke="#E7714F" stroke-width="1.4"/>
+            <text x="85" y="122" fill="#E7714F" font-size="11">TEXT</text>
+            <text x="85" y="165" fill="#E7E5DC">"a photo of a dog"</text>
+
+            <path d="M 165 60 L 225 100" stroke="#FFB454" stroke-width="1.6" fill="none" marker-end="url(#arrH)"/>
+            <path d="M 165 160 L 225 110" stroke="#FFB454" stroke-width="1.6" fill="none" marker-end="url(#arrH)"/>
+            <defs><marker id="arrH" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#FFB454"/></marker></defs>
+
+            <rect x="230" y="65" width="160" height="90" rx="12" fill="#181C26" stroke="#FFB454" stroke-width="1.6"/>
+            <text x="310" y="105" fill="#FFB454" font-size="14" font-weight="600">CLIP</text>
+            <text x="310" y="125" fill="#FFB454" font-size="12">joint embedding</text>
+
+            <path d="M 395 110 L 455 110" stroke="#E7714F" stroke-width="1.6" fill="none" marker-end="url(#arrH2)"/>
+            <defs><marker id="arrH2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#E7714F"/></marker></defs>
+
+            <rect x="460" y="85" width="150" height="50" rx="8" fill="none" stroke="#E7714F" stroke-width="1.4"/>
+            <text x="535" y="77" fill="#E7714F" font-size="11">OUTPUT</text>
+            <text x="535" y="115" fill="#E7E5DC">similarity: 0.31</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 0 — the whole thing as a black box. An image and a piece of text both go in, a similarity score comes out. High score means they match; that single number is the whole training signal.</figcaption>
+    </figure>
+  </div>
+</header>
+
+<!-- ================= 01. BIG PICTURE ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">01 · The Big Picture, Before Any Math</div>
+    <h2 class="title">What CLIP actually replaced</h2>
+    <p class="lede">Before CLIP, image classifiers were trained to predict one of a fixed, pre-decided set of labels — 1000 ImageNet classes, say. Add a new category, and you need new labeled data and a retrained (or at least re-headed) model. The label set is baked in at training time and never moves again.</p>
+
+    <p>"Learning Transferable Visual Models From Natural Language Supervision" — Radford et al., OpenAI, 2021 — sidesteps that entirely by never training a fixed classifier at all. Instead, CLIP learns to predict <strong>which caption goes with which image</strong>, out of a huge, noisy set of 400 million (image, text) pairs scraped from the internet. Because natural language captions can describe literally anything, the resulting model has no fixed label set — you can hand it brand-new categories at inference time, written in plain English, with zero additional training. That's <strong>zero-shot transfer</strong>, and CLIP's zero-shot ImageNet accuracy (76.2%) matches the original supervised ResNet-50 — a model actually trained on ImageNet's 1.28M labeled images — without CLIP ever seeing one of those labeled examples.</p>
+
+    <div class="aside">
+      <span class="term">The one-line pitch</span>
+      Don't teach the model "this is a dog." Teach it "this image and this sentence go together" — at massive scale, across every concept the internet happens to talk about — and dog-recognition falls out as one tiny special case of a much more general skill.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 02. TWO ENCODERS ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">02 · Two Towers, One Shared Space</div>
+    <h2 class="title">The dual-encoder architecture</h2>
+    <p class="lede">CLIP isn't one network — it's two separate encoders trained together, each turning its own kind of input into a single vector that lives in the same shared space.</p>
+
+    <ul class="clean">
+      <li><strong>Image encoder</strong> — either a modified ResNet or a Vision Transformer (ViT), exactly the ViT from the earlier notes: patchify, embed, add position embeddings, run through the encoder stack, take the final <span class="mono">[class]</span> token as the image representation.</li>
+      <li><strong>Text encoder</strong> — a standard Transformer, operating on byte-pair-encoded tokens of the caption, with the final layer's activation at the <span class="mono">[EOS]</span> token taken as the text representation — the same "one summary token absorbs everything" trick as ViT's class token, just on the language side.</li>
+    </ul>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 700 260" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="12" text-anchor="middle">
+            <rect x="30" y="30" width="180" height="60" rx="8" fill="#181C26" stroke="#5FAE82"/>
+            <text x="120" y="65" fill="#5FAE82">Image Encoder</text>
+            <text x="120" y="20" fill="#8B92A1" font-size="11">(ResNet or ViT)</text>
+
+            <rect x="30" y="170" width="180" height="60" rx="8" fill="#181C26" stroke="#E7714F"/>
+            <text x="120" y="205" fill="#E7714F">Text Encoder</text>
+            <text x="120" y="160" fill="#8B92A1" font-size="11">(Transformer)</text>
+
+            <path d="M 210 60 L 280 110" stroke="#FFB454" stroke-width="1.4" fill="none" marker-end="url(#ac1)"/>
+            <path d="M 210 200 L 280 150" stroke="#FFB454" stroke-width="1.4" fill="none" marker-end="url(#ac1)"/>
+            <defs><marker id="ac1" markerWidth="8" markerHeight="8" refX="6" refY="2.5" orient="auto"><path d="M0,0 L6,2.5 L0,5 Z" fill="#FFB454"/></marker></defs>
+
+            <rect x="290" y="100" width="120" height="50" rx="8" fill="#181C26" stroke="#FFB454" stroke-width="1.6"/>
+            <text x="350" y="122" fill="#FFB454" font-size="11">projection</text>
+            <text x="350" y="138" fill="#FFB454" font-size="11">+ L2 norm</text>
+
+            <path d="M 410 125 L 470 125" stroke="#5C7A99" stroke-width="1.4" fill="none" marker-end="url(#ac2)"/>
+            <defs><marker id="ac2" markerWidth="8" markerHeight="8" refX="6" refY="2.5" orient="auto"><path d="M0,0 L6,2.5 L0,5 Z" fill="#5C7A99"/></marker></defs>
+
+            <circle cx="560" cy="125" r="70" fill="none" stroke="#5C7A99" stroke-width="1" stroke-dasharray="4 3"/>
+            <text x="560" y="122" fill="#9db7cf" font-size="11">shared</text>
+            <text x="560" y="138" fill="#9db7cf" font-size="11">embedding space</text>
+            <circle cx="540" cy="105" r="4" fill="#5FAE82"/>
+            <circle cx="580" cy="150" r="4" fill="#E7714F"/>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 1 — image and text each go through their own encoder, then get linearly projected into the same dimensional space and L2-normalized, so both land on the surface of the same unit hypersphere.</figcaption>
+    </figure>
+
+    <div class="def">
+      <span class="term">Why does this need a "shared space" at all?</span>
+      An image encoder and a text encoder produce vectors of possibly different sizes, from completely different modalities — there's no reason to expect them to be comparable out of the box. A learned linear projection for each modality maps both into the same dimensionality, and L2-normalizing both means "similarity" reduces to a plain cosine similarity — a dot product between two unit vectors.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 03. CONTRASTIVE PRETRAINING ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">03 · The Core Training Idea</div>
+    <h2 class="title">Contrastive pre-training — matching, not labeling</h2>
+    <p class="lede">Here's the trick that makes the whole thing work. Given a batch of N (image, text) pairs, CLIP is trained to predict which of the N × N possible (image, text) pairings actually occurred.</p>
+
+    <p>Take a batch of N images and their N matching captions. Encode all N images and all N texts, then compute the cosine similarity between <em>every</em> image and <em>every</em> text — not just the matched pairs. That gives an N × N grid of similarity scores. Only the N cells on the diagonal are true pairs; the other \(N^2 - N\) are mismatched, and CLIP is trained to push the diagonal scores up and every off-diagonal score down, simultaneously, in both directions.</p>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 640 300" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="11" fill="#8B92A1">
+            <text x="20" y="20">SIMILARITY MATRIX — image i vs text j, diagonal = true pairs</text>
+          </g>
+          <g font-family="JetBrains Mono" font-size="10" fill="#8B92A1">
+            <text x="140" y="45" text-anchor="middle">T1</text><text x="200" y="45" text-anchor="middle">T2</text>
+            <text x="260" y="45" text-anchor="middle">T3</text><text x="320" y="45" text-anchor="middle">T4</text><text x="380" y="45" text-anchor="middle">T5</text>
+            <text x="90" y="70" text-anchor="middle">I1</text><text x="90" y="130" text-anchor="middle">I2</text>
+            <text x="90" y="190" text-anchor="middle">I3</text><text x="90" y="250" text-anchor="middle">I4</text>
+          </g>
+          <g stroke="#33425a">
+            <rect x="110" y="50" width="300" height="240" fill="none"/>
+            <line x1="170" y1="50" x2="170" y2="290"/><line x1="230" y1="50" x2="230" y2="290"/><line x1="290" y1="50" x2="290" y2="290"/><line x1="350" y1="50" x2="350" y2="290"/>
+            <line x1="110" y1="110" x2="410" y2="110"/><line x1="110" y1="170" x2="410" y2="170"/><line x1="110" y1="230" x2="410" y2="230"/>
+          </g>
+          <g>
+            <rect x="110" y="50" width="60" height="60" fill="#FFB454" opacity="0.55"/>
+            <rect x="170" y="110" width="60" height="60" fill="#FFB454" opacity="0.55"/>
+            <rect x="230" y="170" width="60" height="60" fill="#FFB454" opacity="0.55"/>
+            <rect x="290" y="230" width="60" height="60" fill="#FFB454" opacity="0.55"/>
+          </g>
+          <g font-family="JetBrains Mono" font-size="10" fill="#E7E5DC" text-anchor="middle">
+            <text x="140" y="85">max</text><text x="200" y="145">max</text><text x="260" y="205">max</text><text x="320" y="265">max</text>
+          </g>
+          <g font-family="JetBrains Mono" font-size="10" fill="#5C7A99" text-anchor="middle" opacity="0.7">
+            <text x="200" y="85">min</text><text x="260" y="85">min</text><text x="320" y="85">min</text>
+            <text x="140" y="145">min</text><text x="260" y="145">min</text><text x="320" y="145">min</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 2 — the N×N similarity matrix for a batch. Diagonal cells (true image-caption pairs) get pushed toward maximum cosine similarity; every off-diagonal cell gets pushed toward minimum.</figcaption>
+    </figure>
+
+    <div class="def">
+      <span class="term">This is contrastive learning, in one sentence</span>
+      Instead of learning "what class is this," the model learns "how similar are these two things" — pulling true pairs together in embedding space and pushing every mismatched pair apart, using the other examples already sitting in the same batch as free negative examples.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 04. THE LOSS ================= -->
+<section class="paper">
+  <div class="wrap-wide">
+    <div class="kicker">04 · Turning "Match The Diagonal" Into A Number</div>
+    <h2 class="title">The symmetric contrastive loss</h2>
+    <p class="lede">"Push the diagonal up, push everything else down" needs to become an actual differentiable loss function before any of this can be trained. CLIP turns each row and each column of the similarity matrix into its own classification problem.</p>
+
+    <p>First, project and normalize both encoder outputs into the shared space:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ I_e = \dfrac{I_f W_i}{\lVert I_f W_i \rVert} \qquad T_e = \dfrac{T_f W_t}{\lVert T_f W_t \rVert} \]
+    </div>
+    <p>Then compute the full similarity matrix, scaled by a learned temperature parameter \(t\):</p>
+    <div class="math-box" style="text-align:center;">
+      \[ \text{logits} = e^{t} \cdot I_e T_e^T \]
+    </div>
+    <p>Treat each <strong>row</strong> of this matrix as a classification problem — "given this image, which of the N texts is the right one?" — and separately treat each <strong>column</strong> the same way in the other direction — "given this text, which of the N images is right?" Both are just standard cross-entropy against the diagonal as ground truth:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ \mathcal{L} = \dfrac{1}{2}\Big[\text{CE}(\text{logits}, \text{diag}) + \text{CE}(\text{logits}^T, \text{diag})\Big] \]
+    </div>
+
+    <ol class="steps">
+      <li><strong>Image-to-text direction:</strong> for each image, softmax over its row of similarities to every text in the batch, and push probability mass toward its true caption.</li>
+      <li><strong>Text-to-image direction:</strong> for each text, softmax over its column of similarities to every image, and push probability mass toward its true image.</li>
+      <li><strong>Average the two:</strong> the final loss is symmetric — neither direction is treated as more important than the other.</li>
+    </ol>
+
+    <div class="aside">
+      <span class="term">Why does the temperature \(t\) matter?</span>
+      Raw cosine similarities live in a narrow range, [-1, 1], which makes the softmax over them too flat to give a strong learning signal. The temperature scales the logits up before the softmax, sharpening the distribution. Rather than hand-tuning it, CLIP learns \(t\) directly as a parameter during training — one less hyperparameter to guess at.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 05. SCALE OF TRAINING ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">05 · Why This Needed The Internet</div>
+    <h2 class="title">The data — WIT, 400 million pairs</h2>
+    <p class="lede">Contrastive learning's negatives come free from the batch — but that also means the whole approach lives or dies on having a lot of diverse, naturally-occurring (image, text) pairs to draw from.</p>
+
+    <p>CLIP is trained on <strong>WIT (WebImageText)</strong>, a new dataset of 400 million (image, text) pairs collected from publicly available sources across the internet — built specifically because existing labeled vision datasets (ImageNet, YFCC100M with usable captions filtered down) were both too small and too narrow in what they described. No human ever manually labeled these pairs; the "label" is just whatever text was already sitting next to the image online.</p>
+
+    <div class="def">
+      <span class="term">Batch size matters more than usual here</span>
+      Because negatives come from other examples in the same batch, a bigger batch means more negative pairs per training step, which means a harder, more informative contrastive problem. CLIP trains with a batch size of 32,768 — large enough that any given image is contrasted against tens of thousands of unrelated captions every single step.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 06. ZERO-SHOT CLASSIFICATION ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">06 · The Payoff — No Fine-Tuning Required</div>
+    <h2 class="title">Zero-shot classification at inference time</h2>
+    <p class="lede">This is the part that actually matters in practice: once pre-training is done, CLIP can classify images into <em>any</em> set of categories you hand it, written as plain text, with no additional training at all.</p>
+
+    <ol class="steps">
+      <li><strong>Turn every candidate class into a sentence.</strong> Instead of feeding the text encoder the bare word "dog," wrap it: <span class="mono">"a photo of a {dog}"</span>. Do this for every class you care about — "dog," "cat," "airplane," whatever the task needs.</li>
+      <li><strong>Encode all of them.</strong> Run every class-sentence through the frozen text encoder to get one embedding vector per class.</li>
+      <li><strong>Encode the query image</strong> through the frozen image encoder to get its single embedding vector.</li>
+      <li><strong>Compare via cosine similarity.</strong> Score the image embedding against every class embedding, softmax the scores, and the highest-probability class is the prediction.</li>
+    </ol>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 700 220" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="11" text-anchor="middle">
+            <rect x="30" y="80" width="120" height="60" rx="8" fill="#181C26" stroke="#5FAE82"/>
+            <text x="90" y="115" fill="#5FAE82">query image</text>
+
+            <rect x="200" y="20" width="180" height="26" rx="6" fill="#181C26" stroke="#33425a"/>
+            <text x="290" y="38" fill="#9db7cf">"a photo of a dog"</text>
+            <rect x="200" y="56" width="180" height="26" rx="6" fill="#181C26" stroke="#33425a"/>
+            <text x="290" y="74" fill="#9db7cf">"a photo of a cat"</text>
+            <rect x="200" y="92" width="180" height="26" rx="6" fill="#181C26" stroke="#33425a"/>
+            <text x="290" y="110" fill="#9db7cf">"a photo of a car"</text>
+            <rect x="200" y="128" width="180" height="26" rx="6" fill="#181C26" stroke="#33425a"/>
+            <text x="290" y="146" fill="#9db7cf">"a photo of a bird"</text>
+            <text x="290" y="176" fill="#8B92A1" font-size="10">…every candidate class, as a sentence</text>
+
+            <path d="M 150 110 L 470 40" stroke="#FFB454" stroke-width="1.6" fill="none" marker-end="url(#az)"/>
+            <path d="M 150 110 L 470 68" stroke="#33425a" stroke-width="1" fill="none"/>
+            <path d="M 150 110 L 470 105" stroke="#33425a" stroke-width="1" fill="none"/>
+            <path d="M 150 110 L 470 141" stroke="#33425a" stroke-width="1" fill="none"/>
+            <defs><marker id="az" markerWidth="8" markerHeight="8" refX="6" refY="2.5" orient="auto"><path d="M0,0 L6,2.5 L0,5 Z" fill="#FFB454"/></marker></defs>
+
+            <rect x="480" y="20" width="180" height="140" rx="8" fill="none" stroke="#5C7A99" stroke-dasharray="4 3"/>
+            <text x="570" y="14" fill="#9db7cf" font-size="10">cosine similarity — highest wins</text>
+            <text x="570" y="46" fill="#FFB454" font-weight="600">dog — 0.31 ✓</text>
+            <text x="570" y="78" fill="#8B92A1">cat — 0.14</text>
+            <text x="570" y="112" fill="#8B92A1">car — 0.02</text>
+            <text x="570" y="146" fill="#8B92A1">bird — 0.09</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 3 — zero-shot inference. No gradient updates happen here at all — both encoders are frozen. The "classifier" is just a set of text embeddings computed on the fly from whatever class names you give it.</figcaption>
+    </figure>
+
+    <div class="def">
+      <span class="term">Why this counts as "zero-shot"</span>
+      A traditional classifier's final layer is a fixed weight matrix, one row per class, learned during training and locked in afterward. CLIP replaces that fixed weight matrix with a text embedding computed on demand from a class name — meaning the "classifier head" itself can be swapped out for any new set of categories, in any order, without touching the model's weights at all.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 07. PROMPT ENGINEERING ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">07 · The Wording Actually Matters</div>
+    <h2 class="title">Prompt engineering and ensembling</h2>
+    <p class="lede">Feeding the text encoder a bare word like "dog" underperforms feeding it a full sentence — because during pre-training, the model almost never saw a caption that was just one word. It learned to expect sentence-shaped captions, so it should be given one at test time too.</p>
+
+    <p>The paper reports that a simple template like <span class="mono">"a photo of a {label}."</span> already improves zero-shot accuracy over bare class names, and that customizing the template to the task helps further — <span class="mono">"a photo of a {label}, a type of pet."</span> for a pet-breed dataset, for instance, to disambiguate what kind of "photo" is meant.</p>
+
+    <p>Going further, CLIP also supports <strong>prompt ensembling</strong>: generate several different template sentences for the same class, encode each one, and average their embeddings before comparing to the image. Combining 80 different templates this way gave a further accuracy boost on ImageNet over any single hand-picked prompt.</p>
+
+    <div class="aside">
+      <span class="term">This is basically prompting, before "prompting" was a common word</span>
+      CLIP's zero-shot setup — write a natural-language description of the task, hand it to a frozen pre-trained model, get an answer with no gradient updates — is structurally the same move that large language model prompting later became famous for, just applied to a vision-language contrastive model instead of an autoregressive one.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 08. TRAINING RECIPE ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">08 · The Practical Training Details</div>
+    <h2 class="title">Training recipe and model sizes</h2>
+    <p class="lede">CLIP wasn't trained as one fixed architecture — the paper trains a family of models across both encoder types, to study how performance scales with compute.</p>
+
+    <table>
+      <tr><th>Component</th><th>Options tried</th></tr>
+      <tr><td>Image encoder</td><td>ResNet-50/101 with attention pooling instead of global average pooling, and scaled variants (RN50x4/16/64); also ViT-B/32, ViT-B/16, ViT-L/14</td></tr>
+      <tr><td>Text encoder</td><td>Transformer, 63M params, 8 attention heads, operating on lowercased byte-pair-encoded text with a 49,152-token vocabulary</td></tr>
+      <tr><td>Batch size</td><td class="mono">32,768</td></tr>
+      <tr><td>Training data</td><td class="mono">400M (image, text) pairs — WIT</td></tr>
+      <tr><td>Best model</td><td>ViT-L/14, fine-tuned at higher resolution (336px) for one additional epoch</td></tr>
+    </table>
+
+    <p>Across the whole model family, the paper finds <strong>zero-shot CLIP performance scales smoothly as a function of model compute</strong> — a clean scaling-law relationship, similar in spirit to what was already being observed for language models, now showing up in a vision-language contrastive setting too.</p>
+  </div>
+</section>
+
+<!-- ================= 09. VS TRADITIONAL CLASSIFIERS ================= -->
+<section class="paper">
+  <div class="wrap-wide">
+    <div class="kicker">09 · Side By Side</div>
+    <h2 class="title">CLIP vs a traditional supervised classifier</h2>
+
+    <table>
+      <tr><th>Property</th><th>Traditional classifier</th><th>CLIP</th></tr>
+      <tr><td>Training signal</td><td>Fixed, human-assigned class labels</td><td>Naturally-occurring image-caption pairs</td></tr>
+      <tr><td>Label set</td><td>Fixed at training time</td><td>Open — any text description, at inference</td></tr>
+      <tr><td>New category</td><td>Needs new labeled data + retraining</td><td>Just write a new sentence, no retraining</td></tr>
+      <tr><td>Output</td><td>Softmax over a fixed class list</td><td>Similarity to whatever text you provide</td></tr>
+      <tr><td>Scale of data needed</td><td>Thousands to millions of labeled examples</td><td>Hundreds of millions of noisy web pairs</td></tr>
+    </table>
+
+    <div class="aside">
+      <span class="term">Not a strict "CLIP always wins" story</span>
+      A classifier fine-tuned directly on a specific dataset's training set can still beat zero-shot CLIP on that exact dataset — CLIP's real strength is robustness and generality across many different distributions at once, not necessarily topping every single specialized benchmark it's compared against.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 10. ADVANTAGES + LIMITATIONS ================= -->
+<section class="dark">
+  <div class="wrap-wide">
+    <div class="kicker">10 · The Honest Trade-offs</div>
+    <h2 class="title">Advantages and limitations</h2>
+
+    <div class="twocol">
+      <div>
+        <h3 class="sub-title" style="margin-top:0;">Advantages</h3>
+        <ul class="clean">
+          <li><strong>True zero-shot transfer</strong> — new classes need only a new sentence, no new data or training.</li>
+          <li><strong>Distribution robustness</strong> — zero-shot CLIP degrades far less than supervised ImageNet models when tested on natural distribution shifts (ImageNet-R, ImageNetV2, sketches, etc.).</li>
+          <li><strong>Free negatives at scale</strong> — contrastive batches turn every non-matching pair into a training signal, with no extra labeling cost.</li>
+          <li><strong>One model, many downstream tasks</strong> — the same frozen encoders work for classification, retrieval, and as a building block inside later multimodal systems.</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="sub-title" style="margin-top:0;">Limitations</h3>
+        <ul class="clean">
+          <li><strong>Data- and compute-hungry</strong> — 400M pairs and large batch sizes aren't reproducible on modest budgets.</li>
+          <li><strong>Weak at fine-grained and abstract tasks</strong> — the paper reports CLIP struggles on tasks like counting objects or distinguishing very similar fine-grained categories.</li>
+          <li><strong>Inherits web-data biases</strong> — since supervision comes straight from uncurated internet text, it also absorbs whatever biases and noise that text carries.</li>
+          <li><strong>Sensitive to prompt wording</strong> — accuracy shifts noticeably based on how the class-name sentence is phrased, requiring some prompt engineering to get the best results.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 11. CHEAT SHEET ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">11 · For When You Just Need The Short Version</div>
+    <h2 class="title">Cheat sheet</h2>
+
+    <table>
+      <tr><th>Parameter</th><th>Value</th><th>Meaning</th></tr>
+      <tr><td>Training pairs</td><td class="mono">400M</td><td>(image, text) pairs — the WIT dataset</td></tr>
+      <tr><td>Batch size</td><td class="mono">32,768</td><td>pairs per training step — sets how many negatives each example sees</td></tr>
+      <tr><td>Text encoder</td><td class="mono">63M params</td><td>Transformer over byte-pair-encoded captions</td></tr>
+      <tr><td>Best image encoder</td><td class="mono">ViT-L/14</td><td>highest-performing vision backbone in the paper</td></tr>
+      <tr><td>Zero-shot ImageNet</td><td class="mono">76.2%</td><td>matches supervised ResNet-50, with no ImageNet labels seen</td></tr>
+    </table>
+
+    <h3 class="sub-title">If you forget everything else, remember this</h3>
+    <ul class="clean">
+      <li><strong>Two frozen-at-inference encoders</strong> — one for images, one for text — sharing one embedding space.</li>
+      <li><strong>Contrastive pre-training</strong> matches images to captions across a whole batch, not just one label per image.</li>
+      <li><strong>Symmetric cross-entropy loss</strong> over the N×N similarity matrix, both row-wise and column-wise, averaged.</li>
+      <li><strong>Cosine similarity + learned temperature</strong> is the entire scoring function — no classifier head at all.</li>
+      <li><strong>Zero-shot classification</strong> just swaps in new text embeddings as the "classes" — no retraining, ever.</li>
+      <li><strong>Prompt wording matters</strong> — template sentences and prompt ensembling both measurably move accuracy.</li>
+      <li>CLIP trades a bit of peak per-dataset accuracy for a lot of generality and robustness to distribution shift.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= FOOTER ================= -->
+<footer>
+  <div class="wrap">
+    <hr class="thin">
+    <p style="color:#C9CDD6; font-size:15.5px;">Built from <strong>"Learning Transferable Visual Models From Natural Language Supervision"</strong> (Radford et al., OpenAI, 2021), and my own earlier notes on ViT and the original Transformer — reorganized, worked through by hand, and written out in my own words so it actually sticks.</p>
+    <p>If you haven't read the ViT notes yet, start there — CLIP's image encoder can literally <em>be</em> a ViT, and the text encoder is the same Transformer block from the very first set of notes in this series. CLIP's real contribution isn't a new block, it's the contrastive training objective that ties the two together.</p>
+    <div class="seriesnav">
+      <a href="#">Radford et al., 2021 — Learning Transferable Visual Models From Natural Language Supervision</a>
+      <a href="#">My notes — Vision Transformer (ViT) Architecture</a>
+      <a href="#">My notes — The Transformer, Attention Is All You Need</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Vision Transformer — An Image Is Worth 16x16 Words (Explained Properly)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js"></script>
+<style>
+  :root{
+    --ink:#1B1F27;
+    --paper:#F6F3EC;
+    --paper-dim:#ECE7DA;
+    --dark:#11141B;
+    --dark-2:#181C26;
+    --amber:#FFB454;
+    --amber-soft:#FFD9A0;
+    --wire-cool:#5C7A99;
+    --wire-cool-dim:#33425a;
+    --muted:#8B92A1;
+    --muted-dark:#6b7280;
+    --red:#E7714F;
+    --green:#5FAE82;
+    --rule: rgba(255,255,255,0.08);
+    --rule-dark: rgba(20,20,20,0.10);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    font-size:17px;
+    line-height:1.72;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:600;
+    letter-spacing:-0.01em;
+    margin:0;
+  }
+  .mono{font-family:'JetBrains Mono',monospace;}
+  a{color:inherit;}
+  p{margin:0 0 1.15em 0;}
+  .wrap{max-width:760px; margin:0 auto; padding:0 28px;}
+  .wrap-wide{max-width:920px; margin:0 auto; padding:0 28px;}
+
+  /* ===== HERO ===== */
+  .hero{
+    background:radial-gradient(ellipse 900px 500px at 50% -10%, #1d2433 0%, var(--dark) 60%);
+    color:var(--paper);
+    padding:104px 0 84px;
+    position:relative;
+    overflow:hidden;
+  }
+  .hero .eyebrow{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--amber);
+    margin-bottom:22px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--amber); box-shadow:0 0 8px 2px var(--amber);}
+  .hero h1{
+    font-size:50px;
+    line-height:1.1;
+    color:#F4F1E8;
+    max-width:680px;
+  }
+  .hero h1 em{ font-style:normal; color:var(--amber); }
+  .hero .sub{
+    margin-top:24px;
+    font-size:18.5px;
+    color:#B9BFCC;
+    max-width:560px;
+  }
+  @media (max-width:640px){ .hero{padding:80px 0 60px;} .hero h1{font-size:34px;} }
+
+  section{padding:80px 0;}
+  section.dark{background:var(--dark); color:#E7E5DC;}
+  section.dark h2, section.dark h3{color:#F4F1E8;}
+  section.paper{background:var(--paper);}
+  section.paper-dim{background:var(--paper-dim);}
+  .kicker{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    letter-spacing:0.13em;
+    text-transform:uppercase;
+    color:var(--amber);
+  }
+  section.paper .kicker, section.paper-dim .kicker{ color:#B5662E; }
+  h2.title{font-size:33px; margin-top:10px; margin-bottom:26px;}
+  h3.sub-title{font-size:21px; margin-top:42px; margin-bottom:14px;}
+  .lede{font-size:19px; color:var(--muted-dark); max-width:620px;}
+  section.dark .lede{color:var(--muted);}
+
+  figure{margin:32px 0;}
+  figure svg{width:100%; height:auto; display:block;}
+  figure img{width:100%; height:auto; display:block; border-radius:8px;}
+  figcaption{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+    color:var(--muted-dark);
+    margin-top:12px;
+    padding-top:10px;
+    border-top:1px solid var(--rule-dark);
+  }
+  section.dark figcaption{color:var(--muted); border-top:1px solid var(--rule);}
+  .fig-card{ background:var(--dark); border-radius:14px; padding:30px 26px 18px; }
+  section.dark .fig-card{ background:#0B0D12; border:1px solid var(--rule); }
+  .fig-card.light{ background:#fff; border:1px solid #E3DECE; }
+  .fig-card.light figcaption{color:var(--muted-dark); border-top:1px solid #ECE6D6;}
+  .fig-card.plain{ background:#fff; border:1px solid #E3DECE; padding:14px; }
+
+  .def{
+    border-left:3px solid var(--amber);
+    background:rgba(255,180,84,0.07);
+    padding:16px 20px;
+    border-radius:0 8px 8px 0;
+    margin:24px 0;
+  }
+  .def .term{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+    color:#B5662E; display:block; margin-bottom:6px;
+  }
+  section.dark .def{background:rgba(255,180,84,0.10);}
+  section.dark .def .term{color:var(--amber);}
+
+  .aside{
+    border-left:3px solid var(--wire-cool);
+    background:rgba(92,122,153,0.07);
+    padding:16px 20px;
+    border-radius:0 8px 8px 0;
+    margin:24px 0;
+    font-size:15.5px;
+  }
+  .aside .term{
+    font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:0.08em; text-transform:uppercase;
+    color:#3d5670; display:block; margin-bottom:6px;
+  }
+  section.dark .aside{background:rgba(92,122,153,0.12);}
+  section.dark .aside .term{color:#9db7cf;}
+
+  .math-box{
+    background:#fff; border:1px solid #E3DECE; border-radius:10px;
+    padding:20px 24px; margin:22px 0; overflow-x:auto;
+  }
+  section.dark .math-box{background:#0B0D12; border-color:var(--rule);}
+
+  table{width:100%; border-collapse:collapse; margin:26px 0; font-size:15.5px;}
+  th,td{padding:12px 14px; text-align:left; border-bottom:1px solid var(--rule-dark);}
+  section.dark th, section.dark td{border-bottom:1px solid var(--rule);}
+  th{font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:0.07em; text-transform:uppercase; color:var(--muted-dark);}
+  section.dark th{color:var(--muted);}
+  td .mono{color:var(--amber);}
+  section.paper td .mono, section.paper-dim td .mono{color:#B5662E;}
+
+  .seriesnav{display:flex; flex-wrap:wrap; gap:10px; margin-top:34px;}
+  .seriesnav a{
+    font-family:'JetBrains Mono',monospace; font-size:12.5px; padding:8px 14px;
+    border:1px solid var(--rule); border-radius:999px; text-decoration:none;
+    color:#C9CDD6; transition:border-color .2s, color .2s;
+  }
+  .seriesnav a:hover{border-color:var(--amber); color:var(--amber);}
+
+  footer{ background:var(--dark); color:var(--muted); padding:60px 0 50px; font-size:14.5px; }
+  footer a{color:var(--amber); text-decoration:none; border-bottom:1px solid rgba(255,180,84,0.3);}
+  hr.thin{border:none; border-top:1px solid var(--rule); margin:30px 0;}
+
+  ul.clean{padding-left:0; list-style:none; margin:18px 0;}
+  ul.clean li{padding-left:22px; position:relative; margin-bottom:10px;}
+  ul.clean li::before{
+    content:""; position:absolute; left:0; top:9px;
+    width:7px; height:7px; border-radius:50%;
+    background:var(--amber); box-shadow:0 0 6px 1px rgba(255,180,84,0.6);
+  }
+
+  .twocol{display:grid; grid-template-columns:1fr 1fr; gap:22px;}
+  @media (max-width:680px){.twocol{grid-template-columns:1fr;}}
+
+  .pulse{ animation: pulseGlow 2.6s ease-in-out infinite; }
+  @keyframes pulseGlow{ 0%,100%{ opacity:0.55; } 50%{ opacity:1; } }
+  @media (prefers-reduced-motion: reduce){ .pulse{animation:none;} }
+</style>
+</head>
+<body>
+
+<!-- ================= HERO ================= -->
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow"><span class="dot pulse"></span>MY NOTES ON THE VISION TRANSFORMER, WRITTEN OUT PROPERLY</div>
+    <h1>Nobody tells the model which patch is the wolf's eye. <em>Self-attention</em> figures that out — by letting every patch look at every other patch, all at once.</h1>
+    <p class="sub">I went through "An Image Is Worth 16x16 Words" line by line, sat with the GeeksforGeeks breakdown, and traced back to what I'd already learned about the original Transformer — because ViT genuinely is just that architecture wearing a different hat. This is that — patches, positions, and everything in between — written the way I actually want to remember it.</p>
+
+    <figure style="margin-top:48px;">
+      <div class="fig-card" style="background:#0B0D12; border:1px solid var(--rule);">
+        <svg viewBox="0 0 620 200" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="13" text-anchor="middle">
+            <rect x="10" y="70" width="150" height="60" rx="8" fill="none" stroke="#5FAE82" stroke-width="1.4"/>
+            <text x="85" y="62" fill="#5FAE82" font-size="11">INPUT</text>
+            <text x="85" y="105" fill="#E7E5DC">image of a wolf</text>
+
+            <path d="M 165 100 L 225 100" stroke="#FFB454" stroke-width="1.6" fill="none" marker-end="url(#arrH)"/>
+            <defs><marker id="arrH" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#FFB454"/></marker></defs>
+
+            <rect x="230" y="55" width="160" height="90" rx="12" fill="#181C26" stroke="#FFB454" stroke-width="1.6"/>
+            <text x="310" y="95" fill="#FFB454" font-size="14" font-weight="600">VISION</text>
+            <text x="310" y="113" fill="#FFB454" font-size="14" font-weight="600">TRANSFORMER</text>
+
+            <path d="M 395 100 L 455 100" stroke="#E7714F" stroke-width="1.6" fill="none" marker-end="url(#arrH2)"/>
+            <defs><marker id="arrH2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#E7714F"/></marker></defs>
+
+            <rect x="460" y="70" width="150" height="60" rx="8" fill="none" stroke="#E7714F" stroke-width="1.4"/>
+            <text x="535" y="62" fill="#E7714F" font-size="11">OUTPUT</text>
+            <text x="535" y="105" fill="#E7E5DC">"wolf"</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 0 — the whole thing as a black box. An image goes in, a class label comes out. Everything below is what happens inside that box.</figcaption>
+    </figure>
+  </div>
+</header>
+
+<!-- ================= 01. BIG PICTURE ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">01 · The Big Picture, Before Any Math</div>
+    <h2 class="title">What ViT actually replaced</h2>
+    <p class="lede">Before this paper, computer vision was CNN territory, full stop. Convolutions slide small filters across an image, building up understanding layer by layer — a pixel only ever sees its immediate neighborhood at first, and it takes many stacked layers before information from opposite corners of the image can influence each other at all.</p>
+
+    <p>"An Image Is Worth 16x16 Words: Transformers for Image Recognition at Scale" — Dosovitskiy et al., Google Research Brain Team, ICLR 2021 — asks a blunt question: does vision actually need any of that convolutional machinery, or can a <strong>plain, unmodified Transformer</strong> just look directly at raw image patches and do the job itself? Turns out, at large enough scale, yes — their best model hit 88.55% top-1 accuracy on ImageNet, 94.55% on CIFAR-100, and 77.63% across the 19-task VTAB suite, all while taking substantially less compute to pre-train than the best CNNs of the time.</p>
+
+    <p>The core move is almost embarrassingly simple: chop the image into fixed-size patches, treat each patch exactly like a word token, and feed the whole sequence into the same Transformer encoder architecture used for text. No convolutions anywhere except, arguably, the one linear projection that turns a patch into a vector.</p>
+
+    <div class="aside">
+      <span class="term">CNN vs ViT, in one line</span>
+      A CNN <em>assumes</em> that nearby pixels matter more than distant ones, and bakes that assumption into every layer. A ViT assumes <em>nothing</em> about which patches matter to which — it has to learn every spatial relationship from data, using self-attention to let any patch talk to any other patch from layer one.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 02. PATCH SPLITTING ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">02 · Turning Pixels Into Tokens</div>
+    <h2 class="title">Image patching — splitting and flattening</h2>
+    <p class="lede">A Transformer can't read a 2D grid of pixels any more than it can read raw letters. Before any attention happens, the image has to become a 1D sequence — and that happens in two small steps, same shape as tokenization + embedding on the text side.</p>
+
+    <p>Take an image \(\mathbf{x} \in \mathbb{R}^{H \times W \times C}\). It gets divided into a grid of fixed-size, <strong>non-overlapping</strong> patches, each of size \(P \times P\). For a 224×224 image with patch size 16, that's a grid of \(224/16 = 14\) patches per side — <span class="mono">14 × 14 = 196</span> patches total, and that count becomes the effective sequence length \(N\) that the Transformer actually sees:</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ N = \dfrac{HW}{P^2} \]
+    </div>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 700 260" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="11" fill="#8B92A1">
+            <text x="150" y="24" text-anchor="middle">ORIGINAL IMAGE</text>
+            <text x="500" y="24" text-anchor="middle">SPLIT INTO PATCHES</text>
+          </g>
+          <rect x="60" y="40" width="180" height="180" rx="6" fill="#181C26" stroke="#5FAE82" stroke-width="1.4"/>
+          <text x="150" y="140" fill="#5FAE82" font-size="12" text-anchor="middle">224 × 224 × 3</text>
+
+          <g stroke="#33425a" stroke-width="1">
+            <rect x="380" y="40" width="180" height="180" rx="6" fill="#181C26" stroke="#FFB454" stroke-width="1.4"/>
+            <line x1="425" y1="40" x2="425" y2="220"/><line x1="470" y1="40" x2="470" y2="220"/><line x1="515" y1="40" x2="515" y2="220"/>
+            <line x1="380" y1="85" x2="560" y2="85"/><line x1="380" y1="130" x2="560" y2="130"/><line x1="380" y1="175" x2="560" y2="175"/>
+          </g>
+          <g font-family="JetBrains Mono" font-size="10" fill="#FFD9A0" text-anchor="middle">
+            <text x="470" y="240">16 × 16 patches, non-overlapping</text>
+          </g>
+
+          <path d="M 245 130 L 375 130" stroke="#FFB454" stroke-width="1.6" fill="none" marker-end="url(#a0)"/>
+          <defs><marker id="a0" markerWidth="8" markerHeight="8" refX="6" refY="2.5" orient="auto"><path d="M0,0 L6,2.5 L0,5 Z" fill="#FFB454"/></marker></defs>
+        </svg>
+      </div>
+      <figcaption>FIG 1 — a 224×224 image cut into a 14×14 grid of non-overlapping 16×16 patches. Each little square becomes exactly one "word" in the sequence the Transformer reads.</figcaption>
+    </figure>
+
+    <p>Each patch, of shape \(P \times P \times C\), is then <strong>flattened</strong> — spatial structure temporarily thrown away — into a single 1D vector of length \(P^2 \cdot C\):</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ \mathbf{x}_p \in \mathbb{R}^{N \times (P^2 \cdot C)} \]
+    </div>
+
+    <div class="def">
+      <span class="term">Why flatten at all?</span>
+      The Transformer encoder has no idea what "2D" means — every sub-layer just operates on a sequence of vectors. Flattening removes the spatial dimensions on purpose, so a 16×16×3 patch becomes one 768-number vector the model can treat uniformly, exactly like a word gets treated as one embedding vector regardless of how many letters it had.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 03. LINEAR PROJECTION / PATCH EMBEDDING ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">03 · Giving Each Patch A Learned Identity</div>
+    <h2 class="title">Patch embedding — the linear projection</h2>
+    <p class="lede">A flattened patch is just raw pixel values — 768 numbers with no learned meaning yet. Exactly like a word needs an embedding lookup before a Transformer can use it, a patch needs to be projected into the model's working space.</p>
+
+    <p>Every flattened patch vector \(\mathbf{x}_p^i\) is multiplied by one trainable matrix \(E\), mapping it from \(P^2 \cdot C\) dimensions into the constant latent size \(D\) used by every layer in the model — \(D = 768\) for the Base config:</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ \mathbf{z}_0 = [\mathbf{x}_{class};\; \mathbf{x}_p^1 E;\; \mathbf{x}_p^2 E;\; \cdots;\; \mathbf{x}_p^N E] + E_{pos} \]
+    </div>
+    <p>where \(E \in \mathbb{R}^{(P^2 \cdot C) \times D}\). This is a single dense layer — nothing fancier than that. The output of this projection is what the paper calls the <strong>patch embeddings</strong>, and it's directly analogous to a word embedding table in NLP: a learned lookup that converts a raw unit into a meaningful vector.</p>
+
+    <div class="aside">
+      <span class="term">A neat implementation shortcut</span>
+      In practice, this "split into patches, flatten, then linearly project" pipeline can be implemented as a single convolution layer with kernel size and stride both equal to the patch size. Each convolution slide then acts as exactly one non-overlapping patch extractor + projector — same math, one line of code.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 04. CLS TOKEN ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">04 · One Extra Token That Does All The Listening</div>
+    <h2 class="title">The learnable [class] token</h2>
+    <p class="lede">After projection you have 196 patch embeddings — but a classifier needs one single vector to make a decision from, not 196 of them. ViT's answer, borrowed straight from BERT, is to invent a 197th token that isn't a patch at all.</p>
+
+    <p>A learnable embedding is <strong>prepended</strong> to the sequence of patch embeddings, \(\mathbf{z}_0^0 = \mathbf{x}_{class}\). It carries no image content of its own at the start — it's just a vector of trainable parameters. But because self-attention lets every token attend to every other token, this class token gets to look at all 196 patches, layer after layer, and gradually accumulate a global summary of the whole image.</p>
+
+    <div class="def">
+      <span class="term">Why not just average-pool the patches instead, like a CNN would?</span>
+      The paper actually tried that — global average pooling over patch embeddings, followed by a linear classifier. It performed poorly at first, but purely because it needed a different learning rate, not because of the pooling itself. They kept the CLS token approach throughout the main paper to stay as close as possible to the original text Transformer, and because it's exactly what BERT already does successfully.
+    </div>
+
+    <p>By the output of the final encoder layer, the class token's state \(\mathbf{z}_L^0\) is treated as the image representation \(\mathbf{y}\), and that's the only vector that gets passed to the classification head — the other 196 output vectors are simply discarded at inference time for classification.</p>
+  </div>
+</section>
+
+<!-- ================= 05. POSITIONAL ENCODING ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">05 · Giving The Model A Sense Of Where</div>
+    <h2 class="title">Positional encoding</h2>
+    <p class="lede">Here's the same real problem from the text Transformer, showing up again: self-attention looks at every patch simultaneously and has no built-in notion of "top-left" or "bottom-right." Without fixing this, the model would treat the image as an unordered bag of patches — shuffle the grid and it wouldn't even notice.</p>
+
+    <p>ViT's fix is simpler than the original paper's sinusoidal formula: standard <strong>learnable</strong> 1D position embeddings, one vector per position, added directly to each patch embedding (and to the class token too):</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ E_{pos} \in \mathbb{R}^{(N+1) \times D} \]
+    </div>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 700 190" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="11" fill="#8B92A1">
+            <text x="20" y="20">PATCH + POSITION EMBEDDING — cls token (0*) prepended, then patches 1–9</text>
+          </g>
+          <g font-family="JetBrains Mono" font-size="12" text-anchor="middle">
+            <rect x="20" y="60" width="46" height="70" rx="10" fill="#FFB454"/>
+            <text x="43" y="100" fill="#181C26" font-weight="600">0*</text>
+            <g fill="#33425a" stroke="#5C7A99">
+              <rect x="76" y="60" width="46" height="70" rx="10"/>
+              <rect x="132" y="60" width="46" height="70" rx="10"/>
+              <rect x="188" y="60" width="46" height="70" rx="10"/>
+              <rect x="244" y="60" width="46" height="70" rx="10"/>
+              <rect x="300" y="60" width="46" height="70" rx="10"/>
+              <rect x="356" y="60" width="46" height="70" rx="10"/>
+              <rect x="412" y="60" width="46" height="70" rx="10"/>
+              <rect x="468" y="60" width="46" height="70" rx="10"/>
+              <rect x="524" y="60" width="46" height="70" rx="10"/>
+            </g>
+            <g fill="#E7E5DC">
+              <text x="99" y="100">1</text><text x="155" y="100">2</text><text x="211" y="100">3</text>
+              <text x="267" y="100">4</text><text x="323" y="100">5</text><text x="379" y="100">6</text>
+              <text x="435" y="100">7</text><text x="491" y="100">8</text><text x="547" y="100">9</text>
+            </g>
+          </g>
+          <g stroke="#33425a">
+            <line x1="43" y1="20" x2="43" y2="55" marker-end="url(#a3)"/>
+            <line x1="99" y1="20" x2="99" y2="55" marker-end="url(#a3)"/>
+            <line x1="155" y1="20" x2="155" y2="55" marker-end="url(#a3)"/>
+            <line x1="211" y1="20" x2="211" y2="55" marker-end="url(#a3)"/>
+            <line x1="267" y1="20" x2="267" y2="55" marker-end="url(#a3)"/>
+            <line x1="323" y1="20" x2="323" y2="55" marker-end="url(#a3)"/>
+            <line x1="379" y1="20" x2="379" y2="55" marker-end="url(#a3)"/>
+            <line x1="435" y1="20" x2="435" y2="55" marker-end="url(#a3)"/>
+            <line x1="491" y1="20" x2="491" y2="55" marker-end="url(#a3)"/>
+            <line x1="547" y1="20" x2="547" y2="55" marker-end="url(#a3)"/>
+            <defs><marker id="a3" markerWidth="8" markerHeight="8" refX="6" refY="2.5" orient="auto"><path d="M0,0 L6,2.5 L0,5 Z" fill="#33425a"/></marker></defs>
+          </g>
+          <g font-family="JetBrains Mono" font-size="11" fill="#8B92A1">
+            <text x="20" y="165">* the extra learnable [class] embedding — position 0</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 2 — the class token sits at position 0, patches fill positions 1 through N. Every one of these 197 tokens now carries both patch content and its own position.</figcaption>
+    </figure>
+
+    <div class="aside">
+      <span class="term">Did fancier 2D-aware position embeddings help?</span>
+      Barely at all. The paper tried no positional info, 1D (default), 2D (separate row/column embeddings), and relative position embeddings — and found little to no difference between them, only a large gap versus using none at all. Their read: because the Transformer works on patch-level inputs (a 14×14 grid, not 224×224 pixels), the spatial dimensions are small enough that the model easily learns row/column structure from plain 1D position embeddings alone.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 06. TRANSFORMER ENCODER ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">06 · The Part That Does All The Thinking</div>
+    <h2 class="title">The Transformer encoder — Pre-LayerNorm architecture</h2>
+    <p class="lede">Once every patch is a position-aware, D-dimensional vector, the actual "understanding" happens in a stack of \(L\) identical Transformer encoder blocks — the exact same block used on the text side, unmodified.</p>
+
+    <p>ViT uses <strong>Pre-LN</strong>: LayerNorm is applied <em>before</em> each sub-layer rather than after, and a residual connection wraps around each sub-layer:</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ \mathbf{z}'_\ell = \text{MSA}(\text{LN}(\mathbf{z}_{\ell-1})) + \mathbf{z}_{\ell-1} \qquad \mathbf{z}_\ell = \text{MLP}(\text{LN}(\mathbf{z}'_\ell)) + \mathbf{z}'_\ell \]
+    </div>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 700 330" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="12" text-anchor="middle">
+            <rect x="220" y="20" width="260" height="270" rx="14" fill="none" stroke="#5C7A99" stroke-width="1" stroke-dasharray="4 4"/>
+            <text x="248" y="40" fill="#8B92A1" font-size="12">L ×</text>
+
+            <rect x="260" y="220" width="180" height="40" rx="8" fill="#181C26" stroke="#5FAE82"/>
+            <text x="350" y="245" fill="#5FAE82">MLP</text>
+
+            <rect x="260" y="172" width="180" height="34" rx="8" fill="#181C26" stroke="#FFB454"/>
+            <text x="350" y="194" fill="#FFB454">Norm</text>
+
+            <rect x="260" y="104" width="180" height="46" rx="8" fill="#181C26" stroke="#E7714F"/>
+            <text x="350" y="132" fill="#E7714F" font-size="11">Multi-Head Attention</text>
+
+            <rect x="260" y="56" width="180" height="34" rx="8" fill="#181C26" stroke="#FFB454"/>
+            <text x="350" y="78" fill="#FFB454">Norm</text>
+
+            <line x1="350" y1="260" x2="350" y2="280" stroke="#33425a" marker-end="url(#a4)"/>
+            <line x1="350" y1="206" x2="350" y2="220" stroke="#33425a" marker-end="url(#a4)"/>
+            <line x1="350" y1="150" x2="350" y2="172" stroke="#33425a" marker-end="url(#a4)"/>
+            <line x1="350" y1="90" x2="350" y2="104" stroke="#33425a" marker-end="url(#a4)"/>
+            <defs><marker id="a4" markerWidth="8" markerHeight="8" refX="6" refY="2.5" orient="auto"><path d="M0,0 L6,2.5 L0,5 Z" fill="#33425a"/></marker></defs>
+
+            <path d="M 260 240 C 200 240, 200 160, 260 128" stroke="#5FAE82" stroke-width="1" fill="none" marker-end="url(#a5)"/>
+            <path d="M 260 192 C 175 192, 175 73, 260 73" stroke="#FFB454" stroke-width="1" fill="none" marker-end="url(#a5)"/>
+            <defs><marker id="a5" markerWidth="8" markerHeight="8" refX="6" refY="2.5" orient="auto"><path d="M0,0 L6,2.5 L0,5 Z" fill="#8B92A1"/></marker></defs>
+
+            <circle cx="280" cy="30" r="10" fill="#33425a"/>
+            <text x="280" y="34" fill="#E7E5DC" font-size="13">+</text>
+            <circle cx="280" cy="158" r="10" fill="#33425a"/>
+            <text x="280" y="162" fill="#E7E5DC" font-size="13">+</text>
+          </g>
+          <g>
+            <rect x="255" y="300" width="190" height="26" rx="6" fill="#181C26" stroke="#5C7A99"/>
+            <text x="350" y="317" fill="#9db7cf" font-family="JetBrains Mono" font-size="11" text-anchor="middle">embedded patches + cls + pos</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 3 — one encoder block, run L times. Norm before attention, norm before MLP, residual "+" around each. This is identical to the encoder half of the original Transformer.</figcaption>
+    </figure>
+
+    <div class="def">
+      <span class="term">Why Pre-LN instead of Post-LN?</span>
+      Normalizing <em>before</em> feeding into attention/MLP, rather than after adding the residual, keeps gradients well-behaved as the stack gets deep. This stabilizes gradient flow and helps avoid the exploding/vanishing gradient problem that deeper Transformer stacks are prone to — a small architectural choice that matters a lot once \(L\) gets into the dozens of layers.
+    </div>
+
+    <div class="math-box" style="text-align:center;">
+      \[ \text{LayerNorm}(x) = \dfrac{x - \mu}{\sigma} \odot \gamma + \beta \]
+    </div>
+    <p>where \(\mu, \sigma\) are the mean and standard deviation computed across the feature dimension, and \(\gamma, \beta\) are learned scale and shift parameters.</p>
+  </div>
+</section>
+
+<!-- ================= 07. SELF-ATTENTION ================= -->
+<section class="paper">
+  <div class="wrap-wide">
+    <div class="kicker">07 · The Core Operation, Again</div>
+    <h2 class="title">Self-attention over patches — Q, K, V</h2>
+    <p class="lede">Inside "Multi-Head Attention" above is the exact same mechanism from text Transformers — just now the tokens being compared are image patches instead of words.</p>
+
+    <p>The input sequence is \(N\) patches plus 1 class token, each a \(D\)-dimensional vector, stacked into a matrix \(X\). Three learned weight matrices project \(X\) into Queries, Keys, and Values:</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ Q = XW^Q, \qquad K = XW^K, \qquad V = XW^V \]
+    </div>
+
+    <div class="def">
+      <span class="term">Q, K, V for patches — same search-engine analogy</span>
+      <strong>Query:</strong> "what am I, the ear patch, looking for elsewhere in the image?" <strong>Key:</strong> "what do I, the eye patch, have to offer, as a label?" <strong>Value:</strong> "what's my actual visual content?" The ear patch's Query gets compared against every other patch's Key to decide how much of that patch's Value to pull in — exactly the same as words, just applied to 16×16 pixel blocks.
+    </div>
+
+    <p>Scores, scale, softmax, weight the Values — same five steps, same formula:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ \text{Attention}(Q,K,V) = \text{softmax}\!\left(\dfrac{QK^T}{\sqrt{d_k}}\right)V \]
+    </div>
+    <p>\(QK^T\) computes a similarity score between every pair of tokens via dot product. \(d_k = D/h\) is the dimension per attention head, and dividing by \(\sqrt{d_k}\) keeps those scores from growing so large that softmax saturates into a region with vanishing gradients. Softmax turns the scaled scores into a probability distribution per token, and multiplying by \(V\) produces a weighted sum — each patch's new representation is a blend of every other patch's content, weighted by relevance.</p>
+
+    <p>This is the whole reason ViT can integrate information globally even in its very first layer, something a CNN's small local kernels simply cannot do without many stacked layers to grow the receptive field.</p>
+  </div>
+</section>
+
+<!-- ================= 08. MULTI-HEAD ATTENTION ================= -->
+<section class="dark">
+  <div class="wrap-wide">
+    <div class="kicker">08 · Many Lenses On The Same Image</div>
+    <h2 class="title">Multi-head self-attention (MSA)</h2>
+    <p class="lede">One attention calculation gives every patch a single lens to compare itself against the rest of the image through. Multiple heads give it several lenses at once, each free to specialize.</p>
+
+    <p>Instead of one attention function over the full \(D\)-dimensional Q/K/V, the model runs \(h\) attention heads in parallel, each on a smaller \(D/h\)-dimensional slice, then concatenates and projects back:</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ \text{head}_i = \text{Attention}(XW_i^Q, XW_i^K, XW_i^V) \]
+      \[ \text{MSA}(X) = \text{Concat}(\text{head}_1, \ldots, \text{head}_h)\,W^O \]
+    </div>
+
+    <div class="def">
+      <span class="term">Why bother with multiple heads for images?</span>
+      Different heads end up specializing in different types of relationships — one head might track edges, another color contrast, another whole-object shape or texture. In fact the paper's own attention-distance analysis found some heads attend to nearly the entire image even in the lowest layers, while others stay tightly localized near the query patch — the model uses both short-range and long-range attention simultaneously, and multi-head attention is what makes room for that split.
+    </div>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 700 260" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="12" text-anchor="middle">
+            <text x="90" y="24" fill="#8B92A1">Q</text>
+            <rect x="50" y="34" width="80" height="80" fill="none" stroke="#FFB454"/>
+            <text x="240" y="24" fill="#8B92A1">Kᵀ</text>
+            <rect x="200" y="34" width="80" height="80" fill="none" stroke="#E7714F"/>
+            <text x="165" y="80" fill="#E7E5DC" font-size="18">×</text>
+            <text x="330" y="80" fill="#E7E5DC" font-size="14">÷ √d_k</text>
+            <path d="M 290 74 L 380 74" stroke="#33425a" marker-end="url(#a6)"/>
+            <defs><marker id="a6" markerWidth="8" markerHeight="8" refX="6" refY="2.5" orient="auto"><path d="M0,0 L6,2.5 L0,5 Z" fill="#33425a"/></marker></defs>
+            <rect x="390" y="34" width="80" height="80" fill="none" stroke="#5C7A99"/>
+            <text x="430" y="24" fill="#8B92A1">scores</text>
+            <text x="500" y="80" fill="#E7E5DC" font-size="13">softmax →</text>
+            <rect x="580" y="34" width="80" height="80" fill="none" stroke="#5FAE82"/>
+            <text x="620" y="24" fill="#8B92A1">weights</text>
+
+            <text x="90" y="170" fill="#8B92A1">weights</text>
+            <rect x="50" y="180" width="80" height="60" fill="none" stroke="#5FAE82"/>
+            <text x="240" y="170" fill="#8B92A1">V</text>
+            <rect x="200" y="180" width="80" height="60" fill="none" stroke="#FFD9A0"/>
+            <text x="165" y="215" fill="#E7E5DC" font-size="18">×</text>
+            <path d="M 290 210 L 380 210" stroke="#33425a" marker-end="url(#a6)"/>
+            <text x="430" y="170" fill="#8B92A1">Z (head i)</text>
+            <rect x="390" y="180" width="80" height="60" fill="none" stroke="#FFB454" stroke-width="2"/>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 4 — one attention head, worked in matrix form: score, scale, softmax, weight. Run this h times with different learned projections, concatenate, project once more with W^O.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ================= 09. FFN ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">09 · Where Each Patch Processes What It Just Learned</div>
+    <h2 class="title">The feed-forward network (FFN / MLP block)</h2>
+    <p class="lede">After attention decides which patches are relevant to which, each token still needs a chance to actually transform that information — independently, with no cross-patch interaction this time.</p>
+
+    <p>Two dense layers with a GELU non-linearity in between, applied identically and independently to every token in the sequence:</p>
+    <div class="math-box" style="text-align:center;">
+      \[ \text{FFN}(x) = W_2\,\text{GELU}(W_1 x + b_1) + b_2 \]
+    </div>
+    <p>The inner dimension expands well beyond \(D\) — for ViT-Base, \(D_{MLP} = 3072\) versus \(D = 768\) — before projecting back down. GELU is used instead of ReLU here for a smoother, better-behaved non-linearity that tends to improve learning stability in deep Transformer stacks.</p>
+
+    <div class="aside">
+      <span class="term">Attention vs FFN, once more</span>
+      Attention answers "which other patches should I pay attention to?" The FFN is where the token actually does something with that gathered context — a per-token, position-wise transformation with no communication between patches at this step. Same split in responsibilities as the text Transformer.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 10. RESIDUALS RECAP ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">10 · Why Nothing Falls Apart At Depth</div>
+    <h2 class="title">Residual connections and LayerNorm, together</h2>
+    <p class="lede">Stack enough raw attention and MLP blocks without any safety net and training a deep network like this becomes unstable fast. Two small additions fix that, wrapped around every single sub-layer.</p>
+
+    <ul class="clean">
+      <li><strong>Residual (skip) connections</strong> bypass each transformation block, so the original signal is never fully overwritten — the model only has to learn an incremental adjustment to \(X\), not a full replacement, which is a much easier optimization problem.</li>
+      <li><strong>LayerNorm</strong> rescales every token vector to zero mean and unit variance (with learned \(\gamma, \beta\)), keeping activations in a consistent range no matter how deep the stack gets — this is what makes training a 12-, 24-, or 32-layer ViT numerically stable instead of exploding or vanishing.</li>
+    </ul>
+
+    <p>Together they're the reason a 32-layer ViT-Huge trains at all — remove either one and gradients either explode, vanish, or the model simply stops improving past a handful of layers.</p>
+  </div>
+</section>
+
+<!-- ================= 11. CLASSIFICATION HEAD ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">11 · Turning A Vector Back Into A Label</div>
+    <h2 class="title">The MLP classification head</h2>
+    <p class="lede">After L encoder blocks, we're left holding one 768-dim vector — the final state of the class token, \(\mathbf{z}_L^0\). Somehow that has to become an actual class prediction.</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ \mathbf{y} = \text{LN}(\mathbf{z}_L^0) \]
+    </div>
+
+    <p>The classification head reads only this vector — not the 196 patch outputs — and passes it through a small feed-forward network: an MLP with one hidden layer (using tanh) during pre-training, collapsing to a single linear layer during fine-tuning. Softmax then converts the raw logits into class probabilities that sum to 1:</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ P(\text{class}) = \text{softmax}(\text{Head}(\mathbf{y})) \]
+    </div>
+
+    <p>Whichever class gets the highest probability is the prediction, and cross-entropy loss against the true label is what drives training end to end — patch embeddings, position embeddings, every attention weight, and the head itself, all learned jointly from the same signal.</p>
+  </div>
+</section>
+
+<!-- ================= 12. TRAINING VITs ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">12 · The Part That Actually Makes Or Breaks ViT</div>
+    <h2 class="title">Training Vision Transformers — the data story</h2>
+    <p class="lede">Everything above is architecture. None of it explains why ViT was considered risky in 2020, or why it works at all. That comes down to one property: inductive bias, or the near-total lack of it.</p>
+
+    <p>A CNN bakes locality and translation equivariance into every layer by construction — it <em>assumes</em> nearby pixels matter more, before it's even seen a single training image. ViT makes almost no such assumption; the only 2D-specific step is cutting the image into patches in the first place. Every spatial relationship between patches has to be learned purely from data.</p>
+
+    <div class="def">
+      <span class="term">The direct consequence: data hunger</span>
+      Trained on ImageNet alone (1.3M images) without heavy regularization, ViT scores a few points <em>below</em> comparably-sized ResNets. Trained on ImageNet-21k (14M images), the gap nearly closes. Only at JFT-300M scale (303M images) does ViT clearly pull ahead of ResNets on both accuracy and pre-training compute. The paper's own framing: large scale training trumps inductive bias — but only once you actually have that scale.
+    </div>
+
+    <p>The practical training recipe follows the now-familiar large-model playbook: <strong>pre-train</strong> on a large dataset (often self-supervised or supervised at massive scale) to learn general visual features, then <strong>fine-tune</strong> on the smaller downstream dataset with far fewer labels — usually replacing the pre-trained head with a zero-initialized layer matching the new number of classes, and often fine-tuning at a higher image resolution than pre-training used.</p>
+  </div>
+</section>
+
+<!-- ================= 13. VIT VS CNN TABLE ================= -->
+<section class="paper-dim">
+  <div class="wrap-wide">
+    <div class="kicker">13 · Side By Side</div>
+    <h2 class="title">ViT vs CNN, the direct comparison</h2>
+
+    <table>
+      <tr><th>Property</th><th>CNN</th><th>ViT</th></tr>
+      <tr><td>Attention scope</td><td>Local, via convolutional kernels</td><td>Global, via self-attention — from layer 1</td></tr>
+      <tr><td>Inductive bias</td><td>Strong — locality, translation equivariance</td><td>Minimal — mostly learned from data</td></tr>
+      <tr><td>Data requirement</td><td>Works well on small/mid datasets</td><td>Needs large-scale pre-training to shine</td></tr>
+      <tr><td>Feature learning</td><td>Hierarchical, built up gradually</td><td>Context-rich, long-range from the start</td></tr>
+      <tr><td>Compute pattern</td><td>Sequential depth to grow receptive field</td><td>Parallel attention across the full sequence</td></tr>
+    </table>
+
+    <div class="aside">
+      <span class="term">Not a strict "ViT wins" story</span>
+      The paper's own scaling study found hybrids — a ResNet feature extractor feeding into a ViT — slightly outperform pure ViT at small compute budgets, though that gap vanishes as models get larger. CNNs remain the better choice whenever you're data- or compute-constrained; ViT is the better choice once you have both scale and a large enough pre-training set.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 14. MODEL VARIANTS ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">14 · The Three Sizes From The Paper</div>
+    <h2 class="title">Model variants — Base, Large, Huge</h2>
+    <p class="lede">ViT configurations are borrowed directly from BERT's Base and Large sizes, with a new, bigger Huge added on top. Notation like <span class="mono">ViT-L/16</span> means the "Large" config with 16×16 patches.</p>
+
+    <table>
+      <tr><th>Model</th><th>Layers</th><th>Hidden size D</th><th>MLP size</th><th>Heads</th><th>Params</th></tr>
+      <tr><td>ViT-Base</td><td class="mono">12</td><td class="mono">768</td><td class="mono">3072</td><td class="mono">12</td><td class="mono">86M</td></tr>
+      <tr><td>ViT-Large</td><td class="mono">24</td><td class="mono">1024</td><td class="mono">4096</td><td class="mono">16</td><td class="mono">307M</td></tr>
+      <tr><td>ViT-Huge</td><td class="mono">32</td><td class="mono">1280</td><td class="mono">5120</td><td class="mono">16</td><td class="mono">632M</td></tr>
+    </table>
+
+    <p>Smaller patch size means a longer sequence, and sequence length scales the compute cost as roughly its square — so <span class="mono">ViT-L/16</span> is meaningfully more expensive to train than <span class="mono">ViT-L/32</span>, even though the parameter count barely changes. The flagship <span class="mono">ViT-H/14</span>, pre-trained on JFT-300M, is what produced the paper's headline 88.55% ImageNet number.</p>
+  </div>
+</section>
+
+<!-- ================= 15. ADVANTAGES + LIMITATIONS ================= -->
+<section class="dark">
+  <div class="wrap-wide">
+    <div class="kicker">15 · The Honest Trade-offs</div>
+    <h2 class="title">Advantages and limitations</h2>
+
+    <div class="twocol">
+      <div>
+        <h3 class="sub-title" style="margin-top:0;">Advantages</h3>
+        <ul class="clean">
+          <li><strong>Global context</strong> from the very first layer, no need to stack depth to grow a receptive field.</li>
+          <li><strong>Scales beautifully</strong> — performance keeps climbing with more data and bigger models, without visibly saturating in the paper's tested range.</li>
+          <li><strong>Parallel by nature</strong> — the whole Transformer architecture computes across the sequence at once.</li>
+          <li><strong>Unified architecture</strong> — the same block handles images, patches, or tokens with no vision-specific redesign.</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="sub-title" style="margin-top:0;">Limitations</h3>
+        <ul class="clean">
+          <li><strong>Data-hungry</strong> — needs genuinely large pre-training sets to beat CNNs, not just "big for ImageNet."</li>
+          <li><strong>Quadratic attention cost</strong> — compute and memory grow with the square of the number of patches.</li>
+          <li><strong>No local bias</strong> — doesn't naturally exploit local pixel patterns, hurting sample efficiency on small data.</li>
+          <li><strong>Hyperparameter-sensitive</strong> — patch size, embedding dimension, and head count all need careful tuning.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 16. CHEAT SHEET ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">16 · For When You Just Need The Short Version</div>
+    <h2 class="title">Cheat sheet</h2>
+
+    <table>
+      <tr><th>Parameter</th><th>Value (Base)</th><th>Meaning</th></tr>
+      <tr><td>Patch size P</td><td class="mono">16</td><td>side length of each square patch, in pixels</td></tr>
+      <tr><td>D</td><td class="mono">768</td><td>constant embedding dimension through every layer</td></tr>
+      <tr><td>N</td><td class="mono">196</td><td>number of patches for a 224×224 image at P=16</td></tr>
+      <tr><td>L (layers)</td><td class="mono">12</td><td>number of stacked encoder blocks</td></tr>
+      <tr><td>h (heads)</td><td class="mono">12</td><td>parallel attention heads</td></tr>
+      <tr><td>d_k</td><td class="mono">64</td><td>dimension per head = D / h</td></tr>
+      <tr><td>MLP size</td><td class="mono">3072</td><td>inner dimension of the FFN, = 4 × D</td></tr>
+    </table>
+
+    <h3 class="sub-title">If you forget everything else, remember this</h3>
+    <ul class="clean">
+      <li><strong>Patchify</strong> the image into fixed, non-overlapping squares — this is ViT's only 2D-specific step.</li>
+      <li><strong>Flatten + linearly project</strong> each patch into a D-dim vector, just like a word embedding.</li>
+      <li><strong>Prepend a learnable [class] token</strong> — its final state becomes the whole image's representation.</li>
+      <li><strong>Add learnable position embeddings</strong> so the model knows which patch sat where.</li>
+      <li><strong>Pre-LN Transformer encoder</strong>, stacked L times: Norm → MSA → residual → Norm → MLP → residual.</li>
+      <li><strong>Self-attention</strong> lets every patch attend to every other patch, globally, from layer one.</li>
+      <li><strong>Multi-head attention</strong> runs that h times in parallel with different learned projections.</li>
+      <li><strong>MLP head</strong> reads only the final class token and outputs class probabilities via softmax.</li>
+      <li>ViT wins over CNNs only once pre-training data is large enough — below that, inductive bias still matters.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= FOOTER ================= -->
+<footer>
+  <div class="wrap">
+    <hr class="thin">
+    <p style="color:#C9CDD6; font-size:15.5px;">Built from <strong>"An Image Is Worth 16x16 Words: Transformers for Image Recognition at Scale"</strong> (Dosovitskiy et al., ICLR 2021), the GeeksforGeeks ViT architecture notes, and my own earlier notes on the original Transformer — reorganized, worked through by hand, and written out in my own words so it actually sticks.</p>
+    <p>If you haven't already, read the original Transformer notes first — every block here (Q/K/V, scaled dot-product attention, multi-head attention, the FFN, residuals + LayerNorm) is identical to that architecture. ViT's entire contribution is steps 1 through 4: turning an image into a sequence a Transformer can read at all.</p>
+    <div class="seriesnav">
+      <a href="#">Dosovitskiy et al., 2021 — An Image Is Worth 16x16 Words</a>
+      <a href="#">GeeksforGeeks — Vision Transformer (ViT) Architecture</a>
+      <a href="#">My notes — The Transformer, Attention Is All You Need</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
