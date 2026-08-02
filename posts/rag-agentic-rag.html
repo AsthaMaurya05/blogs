@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAG &amp; Agentic RAG — Notes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #f5f3ec;
+    --bg-alt: #ebe8dd;
+    --card: #ffffff;
+    --ink: #202b26;
+    --ink-soft: #4b5a52;
+    --line: #d9d4c4;
+    --forest: #3f6c51;
+    --forest-deep: #2a4a38;
+    --amber: #b8863b;
+    --amber-soft: #e8d9bd;
+    --radius: 3px;
+    --maxw: 720px;
+  }
+  *{ box-sizing: border-box; }
+  html{ scroll-behavior: smooth; }
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    font-size: 17px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  a{ color: var(--forest-deep); }
+
+  .wrap{ max-width: var(--maxw); margin: 0 auto; padding: 0 24px 100px; }
+
+  /* ---------- Hero ---------- */
+  .hero{
+    max-width: var(--maxw);
+    margin: 0 auto;
+    padding: 90px 24px 50px;
+    border-bottom: 1px solid var(--line);
+  }
+  .eyebrow{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--amber);
+    margin: 0 0 18px;
+  }
+  h1.title{
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 2.9rem;
+    line-height: 1.08;
+    letter-spacing: -0.01em;
+    margin: 0 0 22px;
+  }
+  h1.title em{ font-style: normal; color: var(--forest); }
+  .dek{
+    font-size: 1.12rem;
+    color: var(--ink-soft);
+    max-width: 54ch;
+    margin: 0;
+  }
+
+  /* ---------- Section rhythm ---------- */
+  section.note{ padding: 56px 0 8px; border-bottom: 1px solid var(--line); }
+  section.note:last-of-type{ border-bottom: none; }
+  .kicker{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--amber);
+    margin: 0 0 10px;
+  }
+  h2.h{
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 1.7rem;
+    margin: 0 0 18px;
+    letter-spacing: -0.01em;
+  }
+  h3.sub{
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 1.24rem;
+    margin: 34px 0 10px;
+  }
+  p{ margin: 0 0 16px; }
+  p.lede{ color: var(--ink-soft); }
+  code{
+    font-family: 'IBM Plex Mono', monospace;
+    background: var(--bg-alt);
+    padding: 2px 6px;
+    border-radius: var(--radius);
+    font-size: 0.9em;
+  }
+  ul{ margin: 0 0 16px; padding-left: 22px; }
+  li{ margin-bottom: 6px; }
+
+  /* ---------- Flow diagram (reused pattern) ---------- */
+  .flow{
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 20px 0 24px;
+    padding: 18px;
+    background: var(--bg-alt);
+    border-radius: var(--radius);
+  }
+  .flow .step{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.82rem;
+    background: var(--card);
+    border: 1px solid var(--line);
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    white-space: nowrap;
+  }
+  .flow .arrow{ color: var(--amber); font-weight: 600; }
+
+  /* ---------- Formula / spec block ---------- */
+  .formula{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.92rem;
+    background: var(--forest-deep);
+    color: var(--amber-soft);
+    padding: 16px 18px;
+    border-radius: var(--radius);
+    margin: 18px 0 24px;
+    overflow-x: auto;
+  }
+  .formula .desc{
+    display: block;
+    font-family: 'Inter', sans-serif;
+    color: #cfe0d4;
+    font-size: 0.82rem;
+    margin-top: 8px;
+  }
+
+  /* ---------- Cards / pairs ---------- */
+  .pair{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin: 20px 0 28px; }
+  @media (max-width: 640px){ .pair{ grid-template-columns: 1fr; } }
+  .card{
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+  .card h4{
+    font-family: 'Fraunces', serif;
+    font-size: 1rem;
+    margin: 0 0 8px;
+    color: var(--forest-deep);
+  }
+  .card p{ font-size: 0.92rem; color: var(--ink-soft); margin: 0; }
+
+  /* ---------- Callout ---------- */
+  .callout{
+    border-left: 3px solid var(--forest);
+    background: var(--bg-alt);
+    padding: 14px 18px;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    font-size: 0.96rem;
+    color: var(--ink-soft);
+    margin: 24px 0;
+  }
+  .callout strong{ color: var(--ink); }
+
+  /* ---------- Diagram wrapper ---------- */
+  .diagram-wrap{
+    margin: 24px 0 30px;
+    padding: 18px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow-x: auto;
+  }
+  .diagram-wrap svg{ display: block; min-width: 640px; width: 100%; height: auto; }
+  .diagram-cap{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--ink-soft);
+    text-align: center;
+    margin-top: 10px;
+  }
+
+  /* ---------- Footer ---------- */
+  .foot{
+    max-width: var(--maxw);
+    margin: 0 auto;
+    padding: 50px 24px 100px;
+    font-size: 0.9rem;
+    color: var(--ink-soft);
+  }
+  .foot a{ display:block; margin-bottom:6px; }
+</style>
+</head>
+<body>
+
+  <div class="hero">
+    <p class="eyebrow">Field Notes · Retrieval</p>
+    <h1 class="title">RAG &amp; <em>Agentic</em> RAG</h1>
+    <p class="dek">An LLM only knows what's in its weights. Connecting it to the world outside them is the whole problem RAG exists to solve — and the whole reason a fixed pipeline eventually needs an agent in the loop.</p>
+  </div>
+
+  <div class="wrap">
+
+    <section class="note">
+      <p class="kicker">01 — The Problem</p>
+      <h2 class="h">Why RAG exists</h2>
+      <p>A language model's knowledge is frozen at training time and limited to what fit inside its weights. Most real questions need something outside that: your documents, your database, today's news. <strong>Connecting an LLM to external data is the central need RAG solves.</strong></p>
+
+      <h3 class="sub">Building the index</h3>
+      <p class="lede">Before you can retrieve anything, your documents need to be turned into something searchable:</p>
+      <div class="flow">
+        <span class="step">Documents</span><span class="arrow">→</span>
+        <span class="step">Chunks</span><span class="arrow">→</span>
+        <span class="step">Embedding Model</span><span class="arrow">→</span>
+        <span class="step">Vectors</span><span class="arrow">→</span>
+        <span class="step">Vector DB</span>
+      </div>
+
+      <h3 class="sub">Answering a question</h3>
+      <p class="lede">At query time, the question is embedded and matched against the index via semantic search. Whatever comes back is injected into the prompt as context, and the model answers from that — not from memory.</p>
+      <div class="flow">
+        <span class="step">Question</span><span class="arrow">→</span>
+        <span class="step">Semantic Search</span><span class="arrow">→</span>
+        <span class="step">Context Injection</span><span class="arrow">→</span>
+        <span class="step">LLM</span><span class="arrow">→</span>
+        <span class="step">Answer</span>
+      </div>
+      <div class="formula">
+        context_window = input_prompt + chunks_from_vector_db
+        <span class="desc">The model never sees the whole document — only the pieces the search step decided were relevant.</span>
+      </div>
+    </section>
+
+    <section class="note">
+      <p class="kicker">02 — The Framework</p>
+      <h2 class="h">Indexing, Retrieval, Generation</h2>
+      <p class="lede">Every RAG system, however elaborate, breaks down into the same three stages:</p>
+      <div class="pair">
+        <div class="card"><h4>Indexing</h4><p>Taking your documents and processing them in some way so they can be easily retrieved later — chunking, embedding, and storing.</p></div>
+        <div class="card"><h4>Retrieval</h4><p>Given a question, pulling the document (or chunks) that are actually relevant to it out of the index.</p></div>
+        <div class="card"><h4>Generation</h4><p>Feeding the retrieved context alongside the original question into the LLM to produce the final answer.</p></div>
+      </div>
+    </section>
+
+    <section class="note">
+      <p class="kicker">03 — Before You Retrieve</p>
+      <h2 class="h">Handling the query itself</h2>
+      <p class="lede">A raw user question is rarely the best possible search query, and "the vector DB" is rarely the only place worth looking. Three things typically happen before retrieval ever fires:</p>
+
+      <h3 class="sub">Query Translation</h3>
+      <p>Taking the question from the user and modifying it in some way to make it better suited for retrieval from the index — rephrasing, expanding, or breaking it into sub-questions.</p>
+
+      <h3 class="sub">Routing</h3>
+      <p>Deciding <em>which</em> source should even answer this question, in one of two ways:</p>
+      <ul>
+        <li><strong>Logical routing</strong> — let the LLM itself choose the data source based on the question.</li>
+        <li><strong>Semantic routing</strong> — embed the question and pick a route by similarity to the closest matching source or prompt.</li>
+      </ul>
+
+      <h3 class="sub">Query Construction</h3>
+      <p class="lede">Taking natural language and converting it into the DSL that whatever data source you're using actually needs:</p>
+      <div class="flow"><span class="step">Relational DB</span><span class="arrow">→</span><span class="step">Text-to-SQL</span></div>
+      <div class="flow"><span class="step">Graph DB</span><span class="arrow">→</span><span class="step">Text-to-Cypher</span></div>
+      <div class="flow"><span class="step">Vector DB</span><span class="arrow">→</span><span class="step">Self-Query Retriever</span></div>
+
+      <div class="callout">Put together: <strong>Question → Query Translation → Query Construction → Routing</strong> to the right store (graph DB, relational DB, or vector store) → the matching document comes back → Retrieval → Generation → Answer. Plain RAG runs this once, start to finish, with no judgment calls along the way.</div>
+    </section>
+
+    <section class="note">
+      <p class="kicker">04 — Where the Pipeline Runs Out of Road</p>
+      <h2 class="h">Agentic RAG</h2>
+      <p class="lede">A plain RAG pipeline always retrieves once and always generates once — whether or not retrieval was actually needed, and whether or not what came back was any good. <strong>Agentic RAG</strong> replaces those fixed steps with an agent that makes a decision at each one: whether to look something up, where to look, and whether the answer it produced is actually good enough to return.</p>
+
+      <div class="diagram-wrap">
+        <svg viewBox="0 0 1040 560" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <path d="M0,0 L6,3 L0,6 Z" fill="var(--amber)"/>
+            </marker>
+          </defs>
+          <style>
+            .node-box{ fill: var(--card); stroke: var(--line); stroke-width: 1.5; }
+            .node-box.accent{ stroke: var(--forest); }
+            .node-title{ font-family:'IBM Plex Mono',monospace; font-size:11px; fill:var(--amber); text-transform:uppercase; letter-spacing:0.05em; }
+            .node-label{ font-family:'Inter',sans-serif; font-size:13.5px; fill:var(--ink); font-weight:600; }
+            .edge{ stroke: var(--ink-soft); stroke-width: 1.5; fill: none; }
+            .edge-tag{ font-family:'IBM Plex Mono',monospace; font-size:11.5px; fill: var(--forest-deep); font-weight:600; }
+          </style>
+
+          <!-- Query -->
+          <rect class="node-box" x="20" y="45" width="110" height="55" rx="4"/>
+          <text class="node-label" x="75" y="78" text-anchor="middle">Query</text>
+
+          <!-- Rewrite Query -->
+          <rect class="node-box accent" x="270" y="20" width="200" height="90" rx="4"/>
+          <text class="node-title" x="290" y="45">LLM Agent</text>
+          <text class="node-label" x="290" y="70">Rewrite</text>
+          <text class="node-label" x="290" y="90">initial query</text>
+
+          <!-- Need More Details -->
+          <rect class="node-box accent" x="600" y="20" width="210" height="90" rx="4"/>
+          <text class="node-title" x="620" y="45">LLM Agent</text>
+          <text class="node-label" x="620" y="70">Need more</text>
+          <text class="node-label" x="620" y="90">details?</text>
+
+          <!-- LLM generate (No branch target) -->
+          <rect class="node-box" x="620" y="185" width="200" height="70" rx="4"/>
+          <text class="node-title" x="640" y="212">LLM</text>
+          <text class="node-label" x="640" y="235">Generate</text>
+
+          <!-- Which source will help -->
+          <rect class="node-box accent" x="850" y="20" width="170" height="90" rx="4"/>
+          <text class="node-title" x="868" y="45">LLM Agent</text>
+          <text class="node-label" x="868" y="70">Which source</text>
+          <text class="node-label" x="868" y="90">will help?</text>
+
+          <!-- Sources -->
+          <rect class="node-box" x="850" y="185" width="170" height="110" rx="4"/>
+          <text class="node-label" x="868" y="212">Vector DB</text>
+          <text class="node-label" x="868" y="232">Tools &amp; APIs</text>
+          <text class="node-label" x="868" y="252">Internet</text>
+
+          <!-- Retrieved Context + Updated Query -->
+          <rect class="node-box" x="620" y="330" width="280" height="90" rx="4"/>
+          <text class="node-label" x="640" y="360">Retrieved context</text>
+          <text class="node-label" x="640" y="382">+ updated query</text>
+
+          <!-- Response -->
+          <rect class="node-box" x="340" y="185" width="180" height="70" rx="4"/>
+          <text class="node-label" x="360" y="225">Response</text>
+
+          <!-- Is Answer Relevant -->
+          <rect class="node-box accent" x="270" y="330" width="230" height="90" rx="4"/>
+          <text class="node-title" x="290" y="355">LLM Agent</text>
+          <text class="node-label" x="290" y="380">Is the answer</text>
+          <text class="node-label" x="290" y="400">relevant?</text>
+
+          <!-- Final Response -->
+          <rect class="node-box accent" x="20" y="330" width="180" height="90" rx="4"/>
+          <text class="node-title" x="40" y="360">Output</text>
+          <text class="node-label" x="40" y="385">Final Response</text>
+
+          <!-- edges -->
+          <!-- Query -> Rewrite -->
+          <path class="edge" d="M130,72 L270,65" marker-end="url(#arrowhead)"/>
+          <!-- Rewrite -> Need More -->
+          <path class="edge" d="M470,65 L600,65" marker-end="url(#arrowhead)"/>
+          <!-- Need More -No-> LLM generate -->
+          <path class="edge" d="M705,110 L705,185" marker-end="url(#arrowhead)"/>
+          <text class="edge-tag" x="714" y="150">No</text>
+          <!-- Need More -Yes-> Which source -->
+          <path class="edge" d="M810,65 C 830,65 830,65 850,65" marker-end="url(#arrowhead)"/>
+          <text class="edge-tag" x="815" y="55">Yes</text>
+          <!-- Which source -> Sources -->
+          <path class="edge" d="M935,110 L935,185" marker-end="url(#arrowhead)"/>
+          <!-- Sources -> Retrieved context -->
+          <path class="edge" d="M900,295 L900,330" marker-end="url(#arrowhead)"/>
+          <!-- Retrieved context -> LLM generate (up) -->
+          <path class="edge" d="M720,330 L720,255" marker-end="url(#arrowhead)"/>
+          <!-- LLM generate -> Response -->
+          <path class="edge" d="M620,220 L520,220" marker-end="url(#arrowhead)"/>
+          <!-- Response -> Is Answer Relevant -->
+          <path class="edge" d="M420,255 L420,330" marker-end="url(#arrowhead)"/>
+          <!-- Is Relevant -Yes-> Final Response -->
+          <path class="edge" d="M270,375 L200,375" marker-end="url(#arrowhead)"/>
+          <text class="edge-tag" x="222" y="368">Yes</text>
+          <!-- Is Relevant -No-> loop back up to Rewrite -->
+          <path class="edge" d="M310,330 C 300,250 300,150 300,110" marker-end="url(#arrowhead)"/>
+          <text class="edge-tag" x="238" y="230">No</text>
+        </svg>
+        <p class="diagram-cap">The agentic RAG loop — every arrow here is a decision, not a fixed step.</p>
+      </div>
+
+      <h3 class="sub">Walking through the loop</h3>
+      <ul>
+        <li>An agent first <strong>rewrites the initial query</strong> — sharpening it the same way query translation does in plain RAG, but as a live decision rather than a fixed rule.</li>
+        <li>A second agent call asks <strong>"do I need more details?"</strong> If not, it skips retrieval entirely and goes straight to generation — plain RAG never has this option, it always retrieves.</li>
+        <li>If more is needed, another agent call decides <strong>which source will actually help</strong>: the vector DB, an external tool or API, or the open internet.</li>
+        <li>Whatever comes back — retrieved context plus the updated query — is handed to the LLM to generate a response.</li>
+        <li>Before returning anything, one more agent call checks: <strong>is the answer actually relevant?</strong> If yes, that's the final response. If no, the loop doesn't just fail — it goes back to rewriting the query and tries again.</li>
+      </ul>
+
+      <div class="callout">The difference in one line: <strong>plain RAG is a pipeline; agentic RAG is a loop with judgment calls.</strong> Retrieval becomes something the model decides to do, not something that always happens — and a bad answer becomes a reason to retry, not a final answer.</div>
+    </section>
+
+    <section class="note">
+      <p class="kicker">05 — Next</p>
+      <h2 class="h">Where this goes next</h2>
+      <p>These are learning notes — the concepts before the code. The next step is actually building both: a plain RAG pipeline first, then wrapping it in the agentic loop above. That implementation writeup will come as a separate, code-forward post once it's built.</p>
+    </section>
+
+  </div>
+
+  <div class="foot">
+    <p class="kicker" style="margin-bottom:10px;">Repos</p>
+    <a href="#">RAG implementation — link coming soon</a>
+    <a href="#">Agentic RAG implementation — link coming soon</a>
+  </div>
+
+</body>
+</html>
