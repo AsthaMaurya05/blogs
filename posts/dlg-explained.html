@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deep Leakage from Gradients (DLG), Explained Properly</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js"></script>
+<style>
+  :root{
+    --ink:#1B1F27;
+    --paper:#F6F3EC;
+    --paper-dim:#ECE7DA;
+    --dark:#11141B;
+    --dark-2:#181C26;
+    --amber:#FFB454;
+    --amber-soft:#FFD9A0;
+    --wire-cool:#5C7A99;
+    --wire-cool-dim:#33425a;
+    --muted:#8B92A1;
+    --muted-dark:#6b7280;
+    --red:#E7714F;
+    --green:#5FAE82;
+    --rule: rgba(255,255,255,0.08);
+    --rule-dark: rgba(20,20,20,0.10);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    font-size:17px;
+    line-height:1.72;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:600;
+    letter-spacing:-0.01em;
+    margin:0;
+  }
+  .mono{font-family:'JetBrains Mono',monospace;}
+  a{color:inherit;}
+  p{margin:0 0 1.15em 0;}
+  .wrap{max-width:760px; margin:0 auto; padding:0 28px;}
+  .wrap-wide{max-width:920px; margin:0 auto; padding:0 28px;}
+
+  .hero{
+    background:radial-gradient(ellipse 900px 500px at 50% -10%, #1d2433 0%, var(--dark) 60%);
+    color:var(--paper);
+    padding:104px 0 84px;
+    position:relative;
+    overflow:hidden;
+  }
+  .hero .eyebrow{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--amber);
+    margin-bottom:22px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--amber); box-shadow:0 0 8px 2px var(--amber);}
+  .hero h1{
+    font-size:50px;
+    line-height:1.1;
+    color:#F4F1E8;
+    max-width:680px;
+  }
+  .hero h1 em{ font-style:normal; color:var(--amber); }
+  .hero .sub{
+    margin-top:24px;
+    font-size:18.5px;
+    color:#B9BFCC;
+    max-width:560px;
+  }
+  @media (max-width:640px){ .hero{padding:80px 0 60px;} .hero h1{font-size:34px;} }
+
+  section{padding:80px 0;}
+  section.dark{background:var(--dark); color:#E7E5DC;}
+  section.dark h2, section.dark h3{color:#F4F1E8;}
+  section.paper{background:var(--paper);}
+  section.paper-dim{background:var(--paper-dim);}
+  .kicker{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    letter-spacing:0.13em;
+    text-transform:uppercase;
+    color:var(--amber);
+  }
+  section.paper .kicker, section.paper-dim .kicker{ color:#B5662E; }
+  h2.title{font-size:33px; margin-top:10px; margin-bottom:26px;}
+  h3.sub-title{font-size:21px; margin-top:42px; margin-bottom:14px;}
+  .lede{font-size:19px; color:var(--muted-dark); max-width:620px;}
+  section.dark .lede{color:var(--muted);}
+
+  figure{margin:32px 0;}
+  figure svg{width:100%; height:auto; display:block;}
+  figcaption{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+    color:var(--muted-dark);
+    margin-top:12px;
+    padding-top:10px;
+    border-top:1px solid var(--rule-dark);
+  }
+  section.dark figcaption{color:var(--muted); border-top:1px solid var(--rule);}
+  .fig-card{ background:var(--dark); border-radius:14px; padding:30px 26px 18px; }
+  section.dark .fig-card{ background:#0B0D12; border:1px solid var(--rule); }
+  .fig-card.light{ background:#fff; border:1px solid #E3DECE; }
+  .fig-card.light figcaption{color:var(--muted-dark); border-top:1px solid #ECE6D6;}
+
+  .def{
+    border-left:3px solid var(--amber);
+    background:rgba(255,180,84,0.07);
+    padding:16px 20px;
+    border-radius:0 8px 8px 0;
+    margin:24px 0;
+  }
+  .def .term{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+    color:#B5662E; display:block; margin-bottom:6px;
+  }
+  section.dark .def{background:rgba(255,180,84,0.10);}
+  section.dark .def .term{color:var(--amber);}
+
+  .aside{
+    border-left:3px solid var(--wire-cool);
+    background:rgba(92,122,153,0.07);
+    padding:16px 20px;
+    border-radius:0 8px 8px 0;
+    margin:24px 0;
+    font-size:15.5px;
+  }
+  .aside .term{
+    font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:0.08em; text-transform:uppercase;
+    color:#3d5670; display:block; margin-bottom:6px;
+  }
+  section.dark .aside{background:rgba(92,122,153,0.12);}
+  section.dark .aside .term{color:#9db7cf;}
+
+  .math-box{
+    background:#fff; border:1px solid #E3DECE; border-radius:10px;
+    padding:20px 24px; margin:22px 0; overflow-x:auto;
+  }
+  section.dark .math-box{background:#0B0D12; border-color:var(--rule);}
+
+  table{width:100%; border-collapse:collapse; margin:26px 0; font-size:15.5px;}
+  th,td{padding:12px 14px; text-align:left; border-bottom:1px solid var(--rule-dark);}
+  section.dark th, section.dark td{border-bottom:1px solid var(--rule);}
+  th{font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:0.07em; text-transform:uppercase; color:var(--muted-dark);}
+  section.dark th{color:var(--muted);}
+  td .mono{color:var(--amber);}
+  section.paper td .mono, section.paper-dim td .mono{color:#B5662E;}
+  .nudge-table{font-family:'JetBrains Mono',monospace; font-size:13.5px;}
+  .nudge-table td{text-align:center;}
+  .nudge-table th{text-align:center;}
+  .nudge-pos{color:#3d5670;}
+  .nudge-neg{color:#B5662E;}
+
+  .seriesnav{display:flex; flex-wrap:wrap; gap:10px; margin-top:34px;}
+  .seriesnav a{
+    font-family:'JetBrains Mono',monospace; font-size:12.5px; padding:8px 14px;
+    border:1px solid var(--rule); border-radius:999px; text-decoration:none;
+    color:#C9CDD6; transition:border-color .2s, color .2s;
+  }
+  .seriesnav a:hover{border-color:var(--amber); color:var(--amber);}
+
+  footer{ background:var(--dark); color:var(--muted); padding:60px 0 50px; font-size:14.5px; }
+  footer a{color:var(--amber); text-decoration:none; border-bottom:1px solid rgba(255,180,84,0.3);}
+  hr.thin{border:none; border-top:1px solid var(--rule); margin:30px 0;}
+
+  ul.clean{padding-left:0; list-style:none; margin:18px 0;}
+  ul.clean li{padding-left:22px; position:relative; margin-bottom:10px;}
+  ul.clean li::before{
+    content:""; position:absolute; left:0; top:9px;
+    width:7px; height:7px; border-radius:50%;
+    background:var(--amber); box-shadow:0 0 6px 1px rgba(255,180,84,0.6);
+  }
+  ol.steps{padding-left:22px; margin:18px 0;}
+  ol.steps li{margin-bottom:8px;}
+
+  .twocol{display:grid; grid-template-columns:1fr 1fr; gap:22px;}
+  @media (max-width:680px){.twocol{grid-template-columns:1fr;}}
+  .threecol{display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px;}
+  @media (max-width:780px){.threecol{grid-template-columns:1fr;}}
+
+  .pulse{ animation: pulseGlow 2.6s ease-in-out infinite; }
+  @keyframes pulseGlow{ 0%,100%{ opacity:0.55; } 50%{ opacity:1; } }
+  @media (prefers-reduced-motion: reduce){ .pulse{animation:none;} }
+</style>
+</head>
+<body>
+
+<!-- ================= HERO ================= -->
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow"><span class="dot pulse"></span>MY NOTES ON GRADIENT PRIVACY, WRITTEN OUT PROPERLY</div>
+    <h1>Federated learning promises your data never leaves your phone. It doesn't promise the gradient it sends won't give the data away anyway.</h1>
+    <p class="sub">I read Zhu, Liu &amp; Han's <em>"Deep Leakage from Gradients"</em> (NeurIPS 2019) — the paper that broke the "gradients are safe to share" assumption behind federated learning — and implemented the attack from scratch in PyTorch, pointing it at my own FedAvg client. This is that, written the way I'd want it explained to me: the reverse-gradient-descent idea, the second-order-derivative trick that makes it possible, and what happened when I actually ran it.</p>
+
+    <figure style="margin-top:48px;">
+      <div class="fig-card" style="background:#0B0D12; border:1px solid var(--rule);">
+        <svg viewBox="0 0 700 260" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrowH2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L8,3 L0,6 Z" fill="#5C7A99"/>
+            </marker>
+          </defs>
+          <g font-family="JetBrains Mono" font-size="12.5" fill="#E7E5DC" text-anchor="middle">
+            <rect x="30" y="20" width="220" height="60" rx="8" fill="#181C26" stroke="#33425a"/>
+            <text x="140" y="44">Victim's real image</text>
+            <text x="140" y="64" fill="#8B92A1" font-size="11">→ model → loss → ∇W</text>
+
+            <line x1="250" y1="50" x2="420" y2="50" stroke="#FFB454" stroke-width="1.6" marker-end="url(#arrowH2)"/>
+            <text x="335" y="38" fill="#FFB454" font-size="11">shared gradient ∇W</text>
+
+            <rect x="30" y="170" width="220" height="60" rx="8" fill="#181C26" stroke="#E7714F"/>
+            <text x="140" y="194">Random dummy image</text>
+            <text x="140" y="214" fill="#8B92A1" font-size="11">→ model → loss → ∇W′</text>
+
+            <rect x="450" y="95" width="200" height="60" rx="8" fill="#181C26" stroke="#5C7A99"/>
+            <text x="550" y="118">D = ‖∇W′ − ∇W‖²</text>
+            <text x="550" y="138" fill="#8B92A1" font-size="10.5">minimize by editing the</text>
+            <text x="550" y="152" fill="#8B92A1" font-size="10.5">dummy image, not the model</text>
+
+            <line x1="420" y1="60" x2="480" y2="95" stroke="#5C7A99" marker-end="url(#arrowH2)"/>
+            <line x1="450" y1="150" x2="250" y2="195" stroke="#E7714F" stroke-width="1.6" marker-end="url(#arrowH2)"/>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 0 — the whole attack in one picture. The model and its weights never change; only the attacker's guess at the input does.</figcaption>
+    </figure>
+  </div>
+</header>
+
+<!-- ================= 01. THE FOLLOW-UP QUESTION ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">01 · The Question The First Paper Left Open</div>
+    <h2 class="title">Okay, but is the gradient actually safe to share?</h2>
+    <p class="lede">Federated learning's whole pitch is: raw data never leaves the device, only a trained update does. This paper asks the follow-up nobody wants to hear: is that update actually harmless, or does it secretly still contain the data?</p>
+
+    <div class="def">
+      <span class="term">The answer, stated plainly</span>
+      No. Given the gradient, the model's architecture, and its current weights, an attacker can reconstruct the exact private training image — not something similar, the actual image, pixel by pixel — along with its label.
+    </div>
+
+    <p>Picture a hospital participating in collaborative learning across several institutions. It never uploads a patient's X-ray. It only sends a gradient computed from that X-ray. The comforting assumption has always been: the server only receives numbers, so it can't know what the X-ray looked like. This paper is the demonstration that the comforting assumption is false.</p>
+  </div>
+</section>
+
+<!-- ================= 02. SHALLOW VS DEEP ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">02 · Why It's Called "Deep" Leakage</div>
+    <h2 class="title">Earlier attacks were "shallow." This one goes all the way.</h2>
+    <p class="lede">People already knew gradients weren't perfectly silent. What's new here is how much they can be made to say.</p>
+
+    <div class="twocol">
+      <div class="fig-card light">
+        <h3 class="sub-title" style="margin-top:0; font-size:16px;">Shallow leakage</h3>
+        <p style="margin-bottom:0;">An embedding layer's gradient is only nonzero for words that actually appeared in training. You learn "the word doctor showed up somewhere" — unordered, ambiguous, not a sentence. Or a GAN generates a synthetic face that looks similar to a training image. Neither one hands you the real data back.</p>
+      </div>
+      <div class="fig-card light">
+        <h3 class="sub-title" style="margin-top:0; font-size:16px;">Deep leakage (DLG)</h3>
+        <p style="margin-bottom:0;">No generative model, no prior knowledge of the dataset, no extra label information required. It's a pure optimization process that recovers the <strong>exact original sample</strong> — pixel-wise for images, token-wise for text — not a synthetic look-alike.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 03. THE ATTACK IDEA ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">03 · Turning Gradient Descent Against Itself</div>
+    <h2 class="title">The core idea: run training backwards</h2>
+    <p class="lede">Normal training goes: data → model → loss → gradient → update the weights. DLG reverses the direction of the question entirely.</p>
+
+    <p>Instead of asking "given this data, how should I update the weights?", the attacker asks: <strong>"what input data, if I'd used it, would have produced this exact gradient I intercepted?"</strong></p>
+
+    <div class="def">
+      <span class="term">Numeric intuition</span>
+      The attacker starts with a completely random dummy image and a random dummy label, feeds them through the (publicly known) model, and computes a dummy gradient <code class="mono">G′</code>. They compare it to the real gradient <code class="mono">G</code> they intercepted:
+      <div class="math-box" style="text-align:center; margin:14px 0 6px;">\[ D = \|G' - G\|^2 \]</div>
+      Then — the actual twist — instead of adjusting the model's weights to shrink this distance, they adjust the <em>dummy image and dummy label</em>. Do this enough times, and the dummy image stops looking like static and starts looking like the victim's real photo.
+    </div>
+
+    <div class="math-box">
+      \[ x'^{*}, y'^{*} = \arg\min_{x',y'} \left\| \frac{\partial \ell(F(x',W),y')}{\partial W} - \nabla W \right\|^2 \]
+    </div>
+
+    <h3 class="sub-title">The technical detail that made it click</h3>
+    <p>Matching gradients this way requires differentiating <code class="mono">D</code> with respect to the dummy input — but <code class="mono">D</code> was itself built from a backward pass. That means computing the <strong>gradient of a gradient</strong>: a second-order derivative. In PyTorch, this means the first backward pass needs <code class="mono">create_graph=True</code>, so the computation graph stays alive long enough for a second backward pass to differentiate through it.</p>
+  </div>
+</section>
+
+<!-- ================= 04. THE ALGORITHM ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">04 · The Loop, Step By Step</div>
+    <h2 class="title">The DLG algorithm</h2>
+    <ol class="steps">
+      <li>Randomly initialize a dummy input <code class="mono">x′</code> and dummy label <code class="mono">y′</code>.</li>
+      <li>Feed them through the model to get a dummy gradient <code class="mono">∇W′</code>.</li>
+      <li>Compute the distance <code class="mono">D = ‖∇W′ − ∇W‖²</code> between the dummy gradient and the real, intercepted one.</li>
+      <li>Take the gradient of <code class="mono">D</code> with respect to <code class="mono">x′</code> and <code class="mono">y′</code> — the second-order step — and update the dummy image and label to shrink <code class="mono">D</code>.</li>
+      <li>Repeat. As <code class="mono">D</code> falls, the dummy data converges toward the real training sample.</li>
+    </ol>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 700 200" xmlns="http://www.w3.org/2000/svg">
+          <line x1="40" y1="170" x2="660" y2="170" stroke="#33425a"/>
+          <line x1="40" y1="20" x2="40" y2="170" stroke="#33425a"/>
+          <path d="M 50 30 C 150 60, 250 120, 350 150 C 420 162, 500 168, 650 169" fill="none" stroke="#FFB454" stroke-width="2.4"/>
+          <text x="50" y="20" fill="#FFB454" font-family="JetBrains Mono" font-size="11">D ≈ 1454</text>
+          <text x="650" y="185" fill="#FFB454" font-family="JetBrains Mono" font-size="11" text-anchor="end">D ≈ 0.14</text>
+          <text x="345" y="192" fill="#8B92A1" font-family="JetBrains Mono" font-size="11" text-anchor="middle">optimization iterations →</text>
+        </svg>
+      </div>
+      <figcaption>FIG 1 — gradient distance falling over the course of the attack. As D drops, the reconstructed image visibly sharpens from noise into a recognizable digit.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ================= 05. BATCHED DATA ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">05 · Where The Attack Gets Harder</div>
+    <h2 class="title">Batches of more than one image</h2>
+    <p class="lede">Everything above assumes a single image and label per gradient. Real training uses batches, and that complicates things.</p>
+
+    <p>With a batch of <code class="mono">N</code> images, there are <code class="mono">N!</code> possible orderings, and naively updating the whole batch at once makes the optimizer thrash between them without converging. The paper's fix: update one sample in the batch at a time instead of all of them simultaneously.</p>
+
+    <table>
+      <tr><th>Batch size</th><th>Iterations to converge (CIFAR / ResNet-20)</th></tr>
+      <tr><td class="mono">1</td><td>270</td></tr>
+      <tr><td class="mono">2</td><td>602</td></tr>
+      <tr><td class="mono">4</td><td>1,173</td></tr>
+      <tr><td class="mono">8</td><td>2,711</td></tr>
+    </table>
+    <p>Larger batches make the attack harder, which is exactly why "increase your batch size" ends up on the paper's own list of defenses.</p>
+  </div>
+</section>
+
+<!-- ================= 06. TEXT ATTACK ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">06 · It's Not Just Images</div>
+    <h2 class="title">Attacking a masked language model</h2>
+    <p class="lede">Pixels are continuous numbers, so you can nudge a dummy pixel value up or down. Words are discrete — you can't "nudge" the word machine a little bit toward the word learning. The paper's workaround is to attack in embedding space instead.</p>
+
+    <ol class="steps">
+      <li>Take the model's word embeddings instead of raw words.</li>
+      <li>Initialize random dummy embeddings and run the same gradient-matching loop.</li>
+      <li>Once the dummy embeddings converge, find the closest real word for each one by nearest-neighbor lookup in the embedding matrix.</li>
+    </ol>
+
+    <div class="def">
+      <span class="term">How good is the recovery?</span>
+      Starting from meaningless token soup, by iteration 30 the paper recovers full, grammatically coherent sentences almost identical to the original conference announcement text — with only a few mismatches caused by tokenization ambiguity. The authors describe the main content as fully leaked.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 07. DEFENSES ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">07 · Can You Actually Stop This?</div>
+    <h2 class="title">Defenses — and why none of them are free</h2>
+    <p class="lede">The paper tests several defenses, and the honest finding is: every one of them trades away either accuracy or practicality to buy privacy back.</p>
+
+    <table>
+      <tr><th>Defense</th><th>Does it work?</th><th>Cost</th></tr>
+      <tr><td>Gaussian / Laplacian noise on gradients</td><td>Only above ~10⁻² variance</td><td>Meaningfully hurts accuracy at that scale</td></tr>
+      <tr><td>Half precision (FP16 / bfloat16)</td><td>No — fails to protect at all</td><td>None, but also no protection</td></tr>
+      <tr><td>INT8 quantization</td><td>Yes</td><td>Accuracy dropped to ~53.7% on CIFAR-100 in the paper's test</td></tr>
+      <tr><td>Gradient pruning, &gt;20% sparsity</td><td>Yes — the paper's recommended defense</td><td>Smallest accuracy cost of the group; compatible with existing compression pipelines</td></tr>
+      <tr><td>Larger batch size</td><td>Makes the N! ordering problem much harder</td><td>Not always practical to change</td></tr>
+      <tr><td>Secure aggregation / homomorphic encryption</td><td>Strongest defense</td><td>Practical limits — integer-only gradients, or server-only compatibility</td></tr>
+    </table>
+
+    <div class="aside">
+      <span class="term">The nuance worth keeping</span>
+      DLG does not mean "federated learning always leaks everything." It means gradient sharing is not automatically safe, and how vulnerable a system actually is depends heavily on batch size, architecture, and whatever processing is applied to the gradient before it's shared.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 08. MY IMPLEMENTATION ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">08 · From Paper To Actual Code</div>
+    <h2 class="title">What I built: attacking my own FedAvg client</h2>
+    <p class="lede">I implemented DLG from scratch in PyTorch and pointed it at the same 2NN architecture from my FedAvg reproduction — attacking my own federated client with the gradients it would actually have shared.</p>
+
+    <table>
+      <tr><th>Step</th><th>What happened</th></tr>
+      <tr><td>Victim</td><td>Trained 2NN for 5 epochs on 5,000 MNIST examples (~93% test accuracy), then computed the gradient for one private test image — 199,210 numbers, the only thing the attacker ever sees</td></tr>
+      <tr><td>Attack initialization</td><td>Pure random noise image, random label — the real image is never touched, even to initialize</td></tr>
+      <tr><td>Starting gradient distance</td><td>~1454</td></tr>
+      <tr><td>Final gradient distance</td><td>~0.14</td></tr>
+      <tr><td>Label recovery</td><td>Correct — recovered label matched the true label</td></tr>
+      <tr><td>Visual recovery</td><td>Noise sharpened into a clearly recognizable digit over ~300 iterations</td></tr>
+    </table>
+
+    <div class="def">
+      <span class="term">What actually surprised me</span>
+      Watching gradient distance and visual similarity fall together, iteration by iteration, is the moment the paper's math stopped being abstract for me. The attacker never sees the real image at any point — it gets there purely by chasing a single number downward.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 09. CONNECTION + CHEAT SHEET ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">09 · Tying It Back To FedAvg</div>
+    <h2 class="title">The one sentence I'd give a professor</h2>
+    <p class="lede">FedAvg says: don't send the data, send the learning. DLG shows that sometimes the learning itself can reveal the data.</p>
+
+    <ul class="clean">
+      <li><strong>DLG</strong> reconstructs private training data from a shared gradient — no generative model, no dataset prior, just optimization.</li>
+      <li>It works by <strong>reversing gradient descent</strong>: optimize the input instead of the weights.</li>
+      <li>It needs <strong>second-order derivatives</strong>, since it differentiates through a backward pass.</li>
+      <li>Larger batches, gradient pruning, and cryptographic aggregation all make the attack harder — but every defense costs either accuracy or practicality.</li>
+      <li>The scientifically careful takeaway: gradients can leak sensitive training data under certain configurations — not "federated learning always leaks everyone's data."</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= FOOTER ================= -->
+<footer>
+  <div class="wrap">
+    <hr class="thin">
+    <p style="color:#C9CDD6; font-size:15.5px;">Based on Ligeng Zhu, Zhijian Liu, and Song Han, <em>"Deep Leakage from Gradients"</em>, NeurIPS 2019 — plus my own from-scratch PyTorch reproduction of the attack, run against the FedAvg client from the companion project, built as part of a research application to a lab working on privacy-preserving federated learning and vulnerabilities in FL frameworks.</p>
+    <p>Full implementation, notebooks, and READMEs are in the repo: <a href="https://github.com/AsthaMaurya05/research_paper_implementation" target="_blank" rel="noopener">github.com/AsthaMaurya05/research_paper_implementation</a></p>
+    <div class="seriesnav">
+      <a href="fedavg-explained.html">← Back in this series: Federated Averaging (FedAvg), Explained Properly</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

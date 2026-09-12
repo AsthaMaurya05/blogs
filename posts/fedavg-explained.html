@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Federated Averaging (FedAvg), Explained Properly</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js"></script>
+<style>
+  :root{
+    --ink:#1B1F27;
+    --paper:#F6F3EC;
+    --paper-dim:#ECE7DA;
+    --dark:#11141B;
+    --dark-2:#181C26;
+    --amber:#FFB454;
+    --amber-soft:#FFD9A0;
+    --wire-cool:#5C7A99;
+    --wire-cool-dim:#33425a;
+    --muted:#8B92A1;
+    --muted-dark:#6b7280;
+    --red:#E7714F;
+    --green:#5FAE82;
+    --rule: rgba(255,255,255,0.08);
+    --rule-dark: rgba(20,20,20,0.10);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    font-size:17px;
+    line-height:1.72;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:600;
+    letter-spacing:-0.01em;
+    margin:0;
+  }
+  .mono{font-family:'JetBrains Mono',monospace;}
+  a{color:inherit;}
+  p{margin:0 0 1.15em 0;}
+  .wrap{max-width:760px; margin:0 auto; padding:0 28px;}
+  .wrap-wide{max-width:920px; margin:0 auto; padding:0 28px;}
+
+  .hero{
+    background:radial-gradient(ellipse 900px 500px at 50% -10%, #1d2433 0%, var(--dark) 60%);
+    color:var(--paper);
+    padding:104px 0 84px;
+    position:relative;
+    overflow:hidden;
+  }
+  .hero .eyebrow{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--amber);
+    margin-bottom:22px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--amber); box-shadow:0 0 8px 2px var(--amber);}
+  .hero h1{
+    font-size:50px;
+    line-height:1.1;
+    color:#F4F1E8;
+    max-width:680px;
+  }
+  .hero h1 em{ font-style:normal; color:var(--amber); }
+  .hero .sub{
+    margin-top:24px;
+    font-size:18.5px;
+    color:#B9BFCC;
+    max-width:560px;
+  }
+  @media (max-width:640px){ .hero{padding:80px 0 60px;} .hero h1{font-size:34px;} }
+
+  section{padding:80px 0;}
+  section.dark{background:var(--dark); color:#E7E5DC;}
+  section.dark h2, section.dark h3{color:#F4F1E8;}
+  section.paper{background:var(--paper);}
+  section.paper-dim{background:var(--paper-dim);}
+  .kicker{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    letter-spacing:0.13em;
+    text-transform:uppercase;
+    color:var(--amber);
+  }
+  section.paper .kicker, section.paper-dim .kicker{ color:#B5662E; }
+  h2.title{font-size:33px; margin-top:10px; margin-bottom:26px;}
+  h3.sub-title{font-size:21px; margin-top:42px; margin-bottom:14px;}
+  .lede{font-size:19px; color:var(--muted-dark); max-width:620px;}
+  section.dark .lede{color:var(--muted);}
+
+  figure{margin:32px 0;}
+  figure svg{width:100%; height:auto; display:block;}
+  figcaption{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+    color:var(--muted-dark);
+    margin-top:12px;
+    padding-top:10px;
+    border-top:1px solid var(--rule-dark);
+  }
+  section.dark figcaption{color:var(--muted); border-top:1px solid var(--rule);}
+  .fig-card{ background:var(--dark); border-radius:14px; padding:30px 26px 18px; }
+  section.dark .fig-card{ background:#0B0D12; border:1px solid var(--rule); }
+  .fig-card.light{ background:#fff; border:1px solid #E3DECE; }
+  .fig-card.light figcaption{color:var(--muted-dark); border-top:1px solid #ECE6D6;}
+
+  .def{
+    border-left:3px solid var(--amber);
+    background:rgba(255,180,84,0.07);
+    padding:16px 20px;
+    border-radius:0 8px 8px 0;
+    margin:24px 0;
+  }
+  .def .term{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+    color:#B5662E; display:block; margin-bottom:6px;
+  }
+  section.dark .def{background:rgba(255,180,84,0.10);}
+  section.dark .def .term{color:var(--amber);}
+
+  .aside{
+    border-left:3px solid var(--wire-cool);
+    background:rgba(92,122,153,0.07);
+    padding:16px 20px;
+    border-radius:0 8px 8px 0;
+    margin:24px 0;
+    font-size:15.5px;
+  }
+  .aside .term{
+    font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:0.08em; text-transform:uppercase;
+    color:#3d5670; display:block; margin-bottom:6px;
+  }
+  section.dark .aside{background:rgba(92,122,153,0.12);}
+  section.dark .aside .term{color:#9db7cf;}
+
+  .math-box{
+    background:#fff; border:1px solid #E3DECE; border-radius:10px;
+    padding:20px 24px; margin:22px 0; overflow-x:auto;
+  }
+  section.dark .math-box{background:#0B0D12; border-color:var(--rule);}
+
+  table{width:100%; border-collapse:collapse; margin:26px 0; font-size:15.5px;}
+  th,td{padding:12px 14px; text-align:left; border-bottom:1px solid var(--rule-dark);}
+  section.dark th, section.dark td{border-bottom:1px solid var(--rule);}
+  th{font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:0.07em; text-transform:uppercase; color:var(--muted-dark);}
+  section.dark th{color:var(--muted);}
+  td .mono{color:var(--amber);}
+  section.paper td .mono, section.paper-dim td .mono{color:#B5662E;}
+  .nudge-table{font-family:'JetBrains Mono',monospace; font-size:13.5px;}
+  .nudge-table td{text-align:center;}
+  .nudge-table th{text-align:center;}
+  .nudge-pos{color:#3d5670;}
+  .nudge-neg{color:#B5662E;}
+
+  .seriesnav{display:flex; flex-wrap:wrap; gap:10px; margin-top:34px;}
+  .seriesnav a{
+    font-family:'JetBrains Mono',monospace; font-size:12.5px; padding:8px 14px;
+    border:1px solid var(--rule); border-radius:999px; text-decoration:none;
+    color:#C9CDD6; transition:border-color .2s, color .2s;
+  }
+  .seriesnav a:hover{border-color:var(--amber); color:var(--amber);}
+
+  footer{ background:var(--dark); color:var(--muted); padding:60px 0 50px; font-size:14.5px; }
+  footer a{color:var(--amber); text-decoration:none; border-bottom:1px solid rgba(255,180,84,0.3);}
+  hr.thin{border:none; border-top:1px solid var(--rule); margin:30px 0;}
+
+  ul.clean{padding-left:0; list-style:none; margin:18px 0;}
+  ul.clean li{padding-left:22px; position:relative; margin-bottom:10px;}
+  ul.clean li::before{
+    content:""; position:absolute; left:0; top:9px;
+    width:7px; height:7px; border-radius:50%;
+    background:var(--amber); box-shadow:0 0 6px 1px rgba(255,180,84,0.6);
+  }
+  ol.steps{padding-left:22px; margin:18px 0;}
+  ol.steps li{margin-bottom:8px;}
+
+  .twocol{display:grid; grid-template-columns:1fr 1fr; gap:22px;}
+  @media (max-width:680px){.twocol{grid-template-columns:1fr;}}
+  .threecol{display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px;}
+  @media (max-width:780px){.threecol{grid-template-columns:1fr;}}
+
+  .pulse{ animation: pulseGlow 2.6s ease-in-out infinite; }
+  @keyframes pulseGlow{ 0%,100%{ opacity:0.55; } 50%{ opacity:1; } }
+  @media (prefers-reduced-motion: reduce){ .pulse{animation:none;} }
+</style>
+</head>
+<body>
+
+<!-- ================= HERO ================= -->
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow"><span class="dot pulse"></span>MY NOTES ON FEDERATED LEARNING, WRITTEN OUT PROPERLY</div>
+    <h1>1 million phones want to train one model together. None of them want to hand over their data. Here's the algorithm that lets both things be true.</h1>
+    <p class="sub">I read McMahan et al.'s "Communication-Efficient Learning of Deep Networks from Decentralized Data" (AISTATS 2017) — the paper that introduced Federated Averaging, or <strong>FedAvg</strong> — and then reproduced it from scratch in PyTorch on MNIST. This is that, cleaned up: what federated learning actually is, why FedAvg works, and what happened when I tried to break it on purpose with non-IID data.</p>
+
+    <figure style="margin-top:48px;">
+      <div class="fig-card" style="background:#0B0D12; border:1px solid var(--rule);">
+        <svg viewBox="0 0 700 260" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrowHero" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L8,3 L0,6 Z" fill="#5C7A99"/>
+            </marker>
+          </defs>
+          <g font-family="JetBrains Mono" font-size="12.5" fill="#E7E5DC" text-anchor="middle">
+            <rect x="280" y="15" width="140" height="50" rx="8" fill="#181C26" stroke="#33425a"/>
+            <text x="350" y="45">Global Model</text>
+
+            <line x1="350" y1="65" x2="150" y2="120" stroke="#5C7A99" marker-end="url(#arrowHero)"/>
+            <line x1="350" y1="65" x2="350" y2="120" stroke="#5C7A99" marker-end="url(#arrowHero)"/>
+            <line x1="350" y1="65" x2="550" y2="120" stroke="#5C7A99" marker-end="url(#arrowHero)"/>
+
+            <rect x="80" y="120" width="140" height="55" rx="8" fill="#181C26" stroke="#33425a"/>
+            <text x="150" y="145">Client 1</text><text x="150" y="163" fill="#8B92A1" font-size="10.5">private data stays here</text>
+
+            <rect x="280" y="120" width="140" height="55" rx="8" fill="#181C26" stroke="#33425a"/>
+            <text x="350" y="145">Client 2</text><text x="350" y="163" fill="#8B92A1" font-size="10.5">private data stays here</text>
+
+            <rect x="480" y="120" width="140" height="55" rx="8" fill="#181C26" stroke="#33425a"/>
+            <text x="550" y="145">Client 3</text><text x="550" y="163" fill="#8B92A1" font-size="10.5">private data stays here</text>
+
+            <line x1="150" y1="175" x2="350" y2="215" stroke="#FFB454" marker-end="url(#arrowHero)"/>
+            <line x1="350" y1="175" x2="350" y2="215" stroke="#FFB454" marker-end="url(#arrowHero)"/>
+            <line x1="550" y1="175" x2="350" y2="215" stroke="#FFB454" marker-end="url(#arrowHero)"/>
+
+            <rect x="250" y="215" width="200" height="40" rx="8" fill="#181C26" stroke="#FFB454"/>
+            <text x="350" y="240" fill="#FFB454">Weighted average of models</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 0 — the whole idea in one picture. Only trained weights travel between client and server. Raw data never does.</figcaption>
+    </figure>
+  </div>
+</header>
+
+<!-- ================= 01. THE PROBLEM ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">01 · The Problem, Before Any Algorithm</div>
+    <h2 class="title">Your keyboard app has great training data. It also can't have it.</h2>
+    <p class="lede">Imagine a keyboard app installed on a million phones. Every phone has exactly the kind of data that would make its next-word prediction better: the words people actually type, in the order they actually type them.</p>
+
+    <p>The obvious way to use this data is the traditional machine learning way: collect it all on a central server, then train there.</p>
+
+    <div class="def">
+      <span class="term">Why that doesn't work here</span>
+      Nobody wants their phone uploading what they type. That includes passwords, private messages, search terms — the exact kind of data that makes the model good is the exact kind of data people don't want leaving their device.
+    </div>
+
+    <p>Federated Learning flips the usual setup around. Instead of bringing the data to the model, it brings <strong>the model to the data</strong>. A phone downloads the current global model, trains it locally on whatever it has, and sends back only the <em>updated model</em> — never the raw data.</p>
+
+    <div class="twocol">
+      <div class="fig-card light">
+        <svg viewBox="0 0 300 160" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="12" fill="#1B1F27" text-anchor="middle">
+            <rect x="20" y="20" width="80" height="40" rx="6" fill="#F6F3EC" stroke="#E3DECE"/><text x="60" y="44">Data</text>
+            <line x1="100" y1="40" x2="130" y2="40" stroke="#8B92A1" marker-end="url(#a1)"/>
+            <rect x="130" y="20" width="90" height="40" rx="6" fill="#F6F3EC" stroke="#E3DECE"/><text x="175" y="44">Server</text>
+            <line x1="175" y1="60" x2="175" y2="90" stroke="#8B92A1" marker-end="url(#a1)"/>
+            <rect x="130" y="90" width="90" height="40" rx="6" fill="#F6F3EC" stroke="#E3DECE"/><text x="175" y="114">Model</text>
+            <defs><marker id="a1" markerWidth="8" markerHeight="8" refX="6" refY="2" orient="auto"><path d="M0,0 L6,2 L0,4 Z" fill="#8B92A1"/></marker></defs>
+          </g>
+        </svg>
+        <figcaption style="border:none; padding-top:6px;">Traditional ML — data has to travel first.</figcaption>
+      </div>
+      <div class="fig-card light">
+        <svg viewBox="0 0 300 160" xmlns="http://www.w3.org/2000/svg">
+          <g font-family="JetBrains Mono" font-size="12" fill="#1B1F27" text-anchor="middle">
+            <rect x="20" y="20" width="90" height="40" rx="6" fill="#F6F3EC" stroke="#5FAE82"/><text x="65" y="44">Global model</text>
+            <line x1="110" y1="40" x2="140" y2="40" stroke="#5FAE82" marker-end="url(#a2)"/>
+            <rect x="140" y="20" width="90" height="40" rx="6" fill="#F6F3EC" stroke="#E3DECE"/><text x="185" y="44">Phone</text>
+            <line x1="185" y1="60" x2="185" y2="90" stroke="#5FAE82" marker-end="url(#a2)"/>
+            <rect x="140" y="90" width="90" height="40" rx="6" fill="#F6F3EC" stroke="#E3DECE"/><text x="185" y="114">Trains locally</text>
+            <line x1="140" y1="110" x2="65" y2="60" stroke="#5FAE82" marker-end="url(#a2)"/>
+            <text x="65" y="90" font-size="10.5" fill="#5FAE82">updated weights only</text>
+            <defs><marker id="a2" markerWidth="8" markerHeight="8" refX="6" refY="2" orient="auto"><path d="M0,0 L6,2 L0,4 Z" fill="#5FAE82"/></marker></defs>
+          </g>
+        </svg>
+        <figcaption style="border:none; padding-top:6px;">Federated Learning — the raw data never moves.</figcaption>
+      </div>
+    </div>
+
+    <p>This is a direct application of a "data minimization" principle: only ever collect the minimum needed to improve the model, and never more. Some trust in the server is still required — but the attack surface shrinks from "the device and the cloud" down to just "the device."</p>
+  </div>
+</section>
+
+<!-- ================= 02. THE SETUP ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">02 · The Federated Learning Setup</div>
+    <h2 class="title">Server, clients, and one round of communication</h2>
+    <p class="lede">The paper's vocabulary is worth learning precisely, because it comes up constantly: a <strong>server</strong> coordinates training, <strong>clients</strong> are the devices, each client holds a <strong>local dataset</strong> that never leaves it, and everyone shares a <strong>global model</strong>.</p>
+
+    <p>One round, top to bottom:</p>
+    <ol class="steps">
+      <li>Server sends the current global model to a selected group of clients.</li>
+      <li>Each client trains that model locally on its own data.</li>
+      <li>Each client sends its updated model back — not its data.</li>
+      <li>Server combines all the updates into a new global model.</li>
+      <li>Repeat.</li>
+    </ol>
+
+    <div class="aside">
+      <span class="term">A subtlety worth sitting with</span>
+      The server never needs the raw data at any point in this loop. It only ever sees model weights. That's the entire privacy pitch of federated learning — though as I found out reading the follow-up paper on this same setup, "the server only sees weights" and "the server can't learn anything about the data" turn out to be two different claims. More on that in a separate post.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 03. WHY COMMUNICATION IS THE BOTTLENECK ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">03 · The Constraint That Shapes Everything</div>
+    <h2 class="title">Why communication, not computation, is the enemy here</h2>
+    <p class="lede">In a data center, communication between machines is cheap and computation is the expensive part — which is why so much deep learning research is about faster GPUs. Federated learning inverts this completely.</p>
+
+    <p>Phones are frequently offline, on slow Wi-Fi, on metered mobile data, or simply asleep. Sending a neural network's worth of parameters back and forth — even a small one has hundreds of thousands of numbers — again and again is genuinely expensive. Meanwhile, modern phones have real processors sitting mostly idle. So the paper's whole strategy can be summarized in one sentence:</p>
+
+    <div class="def">
+      <span class="term">The core trade the paper makes</span>
+      Spend more computation on the client, in exchange for needing far fewer rounds of communication with the server.
+    </div>
+
+    <h3 class="sub-title">The naive baseline: FedSGD</h3>
+    <p>Before getting to FedAvg, it's worth seeing the boring version first. In <strong>FederatedSGD (FedSGD)</strong>, each client computes a single gradient on its local data and immediately sends that gradient back. The server averages the gradients and takes one step. Then it all repeats.</p>
+
+    <div class="math-box" style="text-align:center;">
+      \[ w_{t+1} \leftarrow w_t - \eta \sum_{k=1}^{K} \frac{n_k}{n} g_k \]
+    </div>
+
+    <p>This works, but it means one communication round buys you exactly one gradient step. To train anything real, you need thousands of rounds — and every one of those rounds costs a slow, unreliable network trip.</p>
+  </div>
+</section>
+
+<!-- ================= 04. FEDAVG ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">04 · The Actual Algorithm</div>
+    <h2 class="title">FedAvg: let clients train more before they talk to the server</h2>
+    <p class="lede">The question the authors ask is almost embarrassingly simple: why should a phone communicate after just one gradient step? Let it train for a while first.</p>
+
+    <h3 class="sub-title">The numeric example that made this click for me</h3>
+    <div class="def">
+      <span class="term">Numeric walkthrough</span>
+      Say the global model is a single number for simplicity: <code class="mono">W = 100</code>, sent to three phones.<br><br>
+      Each phone trains locally on its own data:<br>
+      Phone A → <code class="mono">90</code> &nbsp; Phone B → <code class="mono">95</code> &nbsp; Phone C → <code class="mono">100</code><br><br>
+      Server averages: <code class="mono">(90 + 95 + 100) / 3 = 95</code>. That becomes the new global model, sent back out, and the whole thing repeats — maybe next time landing at <code class="mono">93.67</code>, and so on. No phone ever revealed its data, only the number it arrived at after training.
+    </div>
+
+    <p>A real network obviously has millions of numbers instead of one, but the averaging idea is exactly this, applied per-parameter.</p>
+
+    <h3 class="sub-title">The three knobs that control everything</h3>
+    <table>
+      <tr><th>Parameter</th><th>Meaning</th><th>Effect of increasing it</th></tr>
+      <tr><td class="mono">C</td><td>Fraction of clients selected per round</td><td>More parallelism per round</td></tr>
+      <tr><td class="mono">E</td><td>Local epochs each client trains before sending back</td><td>More local computation, fewer rounds needed — up to a point</td></tr>
+      <tr><td class="mono">B</td><td>Local minibatch size</td><td>Smaller B means more local updates per epoch</td></tr>
+    </table>
+
+    <div class="aside">
+      <span class="term">The tidy way to see it</span>
+      Setting <code class="mono">E = 1</code> and <code class="mono">B = ∞</code> (the whole local dataset as one batch) collapses FedAvg exactly back into FedSGD. FedAvg isn't a different algorithm bolted on top — it's the same family, with a dial for "how much do we compute locally before we talk to the server."
+    </div>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 700 300" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrowF" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L8,3 L0,6 Z" fill="#5C7A99"/>
+            </marker>
+          </defs>
+          <g font-family="JetBrains Mono" font-size="12.5" fill="#E7E5DC" text-anchor="middle">
+            <rect x="270" y="10" width="160" height="42" rx="6" fill="#181C26" stroke="#33425a"/>
+            <text x="350" y="36">Global Model Wₜ</text>
+
+            <line x1="350" y1="52" x2="120" y2="105" stroke="#5C7A99" marker-end="url(#arrowF)"/>
+            <line x1="350" y1="52" x2="350" y2="105" stroke="#5C7A99" marker-end="url(#arrowF)"/>
+            <line x1="350" y1="52" x2="580" y2="105" stroke="#5C7A99" marker-end="url(#arrowF)"/>
+
+            <rect x="50" y="105" width="140" height="55" rx="6" fill="#181C26" stroke="#33425a"/>
+            <text x="120" y="128">Client 1</text><text x="120" y="146" fill="#8B92A1" font-size="10.5">E local epochs</text>
+
+            <rect x="280" y="105" width="140" height="55" rx="6" fill="#181C26" stroke="#33425a"/>
+            <text x="350" y="128">Client 2</text><text x="350" y="146" fill="#8B92A1" font-size="10.5">E local epochs</text>
+
+            <rect x="510" y="105" width="140" height="55" rx="6" fill="#181C26" stroke="#33425a"/>
+            <text x="580" y="128">Client 3</text><text x="580" y="146" fill="#8B92A1" font-size="10.5">E local epochs</text>
+
+            <line x1="120" y1="160" x2="350" y2="215" stroke="#FFB454" marker-end="url(#arrowF)"/>
+            <line x1="350" y1="160" x2="350" y2="215" stroke="#FFB454" marker-end="url(#arrowF)"/>
+            <line x1="580" y1="160" x2="350" y2="215" stroke="#FFB454" marker-end="url(#arrowF)"/>
+
+            <rect x="230" y="215" width="240" height="44" rx="6" fill="#181C26" stroke="#FFB454"/>
+            <text x="350" y="242">Weighted average by nₖ</text>
+
+            <line x1="350" y1="259" x2="350" y2="285" stroke="#5FAE82" marker-end="url(#arrowF)"/>
+            <text x="350" y="298" fill="#5FAE82">New Global Model Wₜ₊₁</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIG 1 — one full round of FedAvg. The averaging is weighted by how much data each client contributed, so a client with 1,000 samples counts more than one with 100.</figcaption>
+    </figure>
+
+    <h3 class="sub-title">The math, written properly</h3>
+    <p>The global objective decomposes into a weighted sum over clients:</p>
+    <div class="math-box">
+      \[ f(w) = \sum_{k=1}^{K} \frac{n_k}{n} F_k(w), \qquad F_k(w) = \frac{1}{n_k}\sum_{i \in P_k} f_i(w) \]
+    </div>
+    <p>Each round, a client runs local SGD for <code class="mono">E</code> epochs starting from the shared global weights, then the server aggregates:</p>
+    <div class="math-box">
+      \[ w_{t+1} = \sum_{k \in S_t} \frac{n_k}{n_t} \, w_{t+1}^{k} \]
+    </div>
+  </div>
+</section>
+
+<!-- ================= 05. WHY AVERAGING EVEN WORKS ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">05 · The Part That Shouldn't Work, But Does</div>
+    <h2 class="title">Averaging two neural networks sounds like it should produce garbage</h2>
+    <p class="lede">Neural networks are non-convex. Naively, averaging the parameters of two different trained models — a fundamentally arbitrary operation in a huge, bumpy loss landscape — sounds like it should land you somewhere terrible.</p>
+
+    <p>The paper actually checks this. They trained two MNIST models on different small subsets of data, then plotted the loss along the line between them. Starting from two <em>different</em> random initializations, averaging is indeed bad — the midpoint has much higher loss than either parent model. But starting both models from the <strong>same</strong> initialization, averaging is not just safe, it's better than either parent alone.</p>
+
+    <div class="def">
+      <span class="term">Why this matters for FedAvg specifically</span>
+      Every round of FedAvg starts every client from the exact same shared global weights. That shared starting point is precisely the condition under which averaging works well — it's not a lucky coincidence, it's why the algorithm is designed this way.
+    </div>
+  </div>
+</section>
+
+<!-- ================= 06. NON-IID ================= -->
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker">06 · What Actually Makes This Hard</div>
+    <h2 class="title">Non-IID and unbalanced data</h2>
+    <p class="lede">A data-center cluster usually gets to assume every worker sees roughly the same kind of data. Real phones break that assumption completely, and the paper treats this as a defining property of the setting, not an edge case to footnote.</p>
+
+    <ul class="clean">
+      <li><strong>Non-IID</strong> — one user mostly types in Hindi, another mostly in English. Each client's local data distribution looks nothing like the global distribution.</li>
+      <li><strong>Unbalanced</strong> — one user has generated 10 examples, another 10,000.</li>
+      <li><strong>Massively distributed</strong> — there can be far more clients than examples per client.</li>
+      <li><strong>Limited communication</strong> — offline, slow, or metered connections are the norm, not the exception.</li>
+    </ul>
+
+    <p>To stress-test this, the paper's harshest experiment sorts MNIST by digit label and gives each client only <strong>2 out of 10 digit classes</strong>. Most clients only ever see two digits. It's a deliberately pathological setup, designed to see exactly how far the algorithm can be pushed before it breaks.</p>
+  </div>
+</section>
+
+<!-- ================= 07. MY IMPLEMENTATION ================= -->
+<section class="paper">
+  <div class="wrap">
+    <div class="kicker">07 · From Paper To Actual Code</div>
+    <h2 class="title">What I built: a FedAvg reproduction on MNIST</h2>
+    <p class="lede">I implemented the client/server loop from scratch in PyTorch — no federated learning library — and reproduced the paper's core question: does giving clients more local epochs (E) actually cut down the number of communication rounds needed?</p>
+
+    <table>
+      <tr><th>Component</th><th>Paper spec</th><th>My implementation</th></tr>
+      <tr><td>Dataset</td><td>MNIST</td><td>60,000 train / 10,000 test</td></tr>
+      <tr><td>Clients</td><td>K = 100</td><td>100 clients</td></tr>
+      <tr><td>IID partition</td><td>600 examples per client, shuffled</td><td>Matched</td></tr>
+      <tr><td>Non-IID partition</td><td>200 shards of 300, 2 shards per client, sorted by label</td><td>Matched — the pathological 2-digit-per-client split</td></tr>
+      <tr><td>2NN model</td><td>199,210 parameters</td><td>199,210 — verified</td></tr>
+      <tr><td>CNN model</td><td>1,663,370 parameters</td><td>1,663,370 — matched only after inferring <code class="mono">padding=2</code>, since the paper never states the padding scheme explicitly and the count only lines up with same-padding</td></tr>
+    </table>
+
+    <h3 class="sub-title">Result: more local epochs, better final model — with a catch</h3>
+    <table>
+      <tr><th>E (local epochs)</th><th>Final accuracy, Non-IID, 50 rounds</th><th>What I observed</th></tr>
+      <tr><td class="mono">1</td><td>88.18%</td><td>Fast early progress, low ceiling</td></tr>
+      <tr><td class="mono">5</td><td>93.79%</td><td>Good balance</td></tr>
+      <tr><td class="mono">20</td><td>95.40%</td><td>Slow start, best final accuracy</td></tr>
+    </table>
+
+    <figure>
+      <div class="fig-card">
+        <svg viewBox="0 0 700 240" xmlns="http://www.w3.org/2000/svg">
+          <line x1="40" y1="200" x2="660" y2="200" stroke="#33425a"/>
+          <line x1="40" y1="20" x2="40" y2="200" stroke="#33425a"/>
+          <path d="M 50 190 C 100 60, 130 190, 170 70 C 210 180, 250 50, 290 175 C 330 55, 370 190, 410 65 C 450 170, 490 60, 530 100 C 570 55, 610 60, 650 45" fill="none" stroke="#E7714F" stroke-width="2.2"/>
+          <text x="655" y="40" fill="#E7714F" font-family="JetBrains Mono" font-size="12" text-anchor="end">E = 20 (non-IID)</text>
+          <text x="345" y="220" fill="#8B92A1" font-family="JetBrains Mono" font-size="11" text-anchor="middle">communication rounds →</text>
+        </svg>
+      </div>
+      <figcaption>FIG 2 — the accuracy curve I actually got at E=20 on non-IID data. Bouncing between roughly 77% and 95% round to round, not the smooth climb you'd expect.</figcaption>
+    </figure>
+
+    <div class="def">
+      <span class="term">Client drift — the thing I had to actually understand, not just report</span>
+      With only 2 digit classes per client, 20 local epochs is enough for each client to overfit hard to its narrow slice of data before sending weights back. Different clients drift toward wildly different local optima. When the server averages clients that disagree this strongly, the global model can temporarily get worse before recovering on the next round. This isn't a bug in my code — it's exactly the failure mode that later work like SCAFFOLD was built to correct with control variates.
+    </div>
+
+    <p>I also ran the CNN under the same non-IID setup (E ∈ {1, 5}, 25 rounds) and saw the same story hold up: the CNN outperformed the 2NN outright, and E=5 beat E=1, which told me this wasn't an artifact of one particular architecture.</p>
+  </div>
+</section>
+
+<!-- ================= 08. CHEAT SHEET ================= -->
+<section class="paper-dim">
+  <div class="wrap">
+    <div class="kicker">08 · For When You Just Need The Short Version</div>
+    <h2 class="title">The cheat sheet</h2>
+    <ul class="clean">
+      <li><strong>Federated Learning</strong> trains a shared model across many devices without ever centralizing their data.</li>
+      <li><strong>FedSGD</strong> is the naive baseline — one gradient step per client, per communication round.</li>
+      <li><strong>FedAvg</strong> lets each client run multiple local epochs before the server averages the resulting models, trading local computation for far fewer communication rounds.</li>
+      <li><strong>C, E, B</strong> are the three knobs — client fraction, local epochs, local batch size.</li>
+      <li><strong>Non-IID and unbalanced data</strong> are the defining, unavoidable difficulty of this setting, not an edge case.</li>
+      <li>Shared initialization is <em>why</em> naive parameter averaging works at all — start every client from the same weights each round, and averaging becomes safe.</li>
+      <li>Too much local computation isn't free: pushed too far on very skewed data, it causes <strong>client drift</strong>, visible as oscillating accuracy round to round.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= FOOTER ================= -->
+<footer>
+  <div class="wrap">
+    <hr class="thin">
+    <p style="color:#C9CDD6; font-size:15.5px;">Based on H. Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Agüera y Arcas, <em>"Communication-Efficient Learning of Deep Networks from Decentralized Data"</em>, AISTATS 2017 — plus my own from-scratch PyTorch reproduction (2NN and CNN on MNIST, IID and pathological non-IID partitions), built as part of a research application to a lab working on privacy-preserving federated learning.</p>
+    <p>Full implementation, notebooks, and READMEs are in the repo: <a href="https://github.com/AsthaMaurya05/research_paper_implementation" target="_blank" rel="noopener">github.com/AsthaMaurya05/research_paper_implementation</a></p>
+    <div class="seriesnav">
+      <a href="dlg-explained.html">Next in this series → Deep Leakage from Gradients: is sharing weights actually safe?</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

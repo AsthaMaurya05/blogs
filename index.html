@@ -11,6 +11,7 @@
     --line:#cfcfcf;
     --box:#f4f4f2;
     --accent:#2b5d8c;
+    --accent2:#8c4a2b;
   }
   *{box-sizing:border-box;}
   body{
@@ -20,7 +21,7 @@
     font-family: Georgia, 'Times New Roman', serif;
     font-size:17px;
     line-height:1.6;
-    max-width:680px;
+    max-width:920px;
     margin:0 auto;
     padding:60px 24px 90px;
   }
@@ -34,45 +35,81 @@
     font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
     font-size:15px;
     margin:0 0 44px 0;
+    max-width:640px;
   }
-  .post-list{ list-style:none; padding:0; margin:0; }
+
+  h2.section-title{
+    font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:#666;
+    margin:0 0 6px 0;
+    padding-top:8px;
+    border-top:1px solid var(--line);
+  }
+  section:first-of-type h2.section-title{ border-top:none; padding-top:0; }
+  p.section-sub{
+    font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-size:14.5px;
+    color:#777;
+    margin:0 0 20px 0;
+  }
+
+  .post-list{
+    list-style:none;
+    padding:0;
+    margin:0 0 56px 0;
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:16px;
+  }
+  @media (max-width:820px){ .post-list{ grid-template-columns:repeat(2, 1fr); } }
+  @media (max-width:560px){ .post-list{ grid-template-columns:1fr; } }
+
   .post{
-    display:block;
+    display:flex;
+    flex-direction:column;
+    height:100%;
     border:1px solid var(--line);
     border-radius:6px;
-    padding:20px 22px;
-    margin-bottom:16px;
+    padding:18px 20px;
     text-decoration:none;
     color:var(--ink);
-    transition:border-color .15s, background .15s;
+    transition:border-color .15s, background .15s, transform .15s;
   }
-  .post:hover{ border-color:var(--accent); background:var(--box); }
+  .post:hover{ border-color:var(--accent); background:var(--box); transform:translateY(-1px); }
   .post .tag{
     font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    font-size:11.5px;
+    font-size:11px;
     text-transform:uppercase;
     letter-spacing:0.06em;
     color:var(--accent);
     display:block;
     margin-bottom:8px;
   }
-  .post h2{
+  .papers .post .tag{ color:var(--accent2); }
+  .post h3{
     font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    font-size:19px;
-    margin:0 0 8px 0;
+    font-size:16.5px;
+    line-height:1.35;
+    margin:0;
+    flex-grow:1;
   }
   .post p{
-    margin:0;
-    font-size:15px;
-    color:#444;
+    margin:10px 0 0 0;
+    font-size:13.5px;
+    color:#666;
     font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    line-height:1.5;
   }
   .post.disabled{
     opacity:0.45;
     pointer-events:none;
   }
+
   footer{
-    margin-top:60px;
+    margin-top:10px;
     font-size:13px;
     color:#888;
     font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
@@ -84,62 +121,87 @@
   <h1>Learning Notes</h1>
   <p class="sub">A running set of notes on machine learning fundamentals — built while working through video courses and my own handwritten derivations.</p>
 
-  <ul class="post-list">
-    <li>
-      <a class="post" href="posts/neural-networks-explained.html">
-        <span class="tag">Neural Networks</span>
-        <h2>Neural Networks &amp; Backpropagation</h2>
-      </a>
-    </li>
-    <li>
-      <a class="post" href="posts/cnn-explained.html">
-        <span class="tag">CNN</span>
-        <h2>Convolutional Neural Networks</h2>
-      </a>
-    </li>
-    <li>
-      <a class="post" href="posts/rnn-explained.html">
-        <span class="tag">RNN</span>
-        <h2>Recurrent Neural Networks</h2>
-      </a>
-    </li>
-    <li>
-      <a class="post" href="posts/transformer-explained.html">
-        <span class="tag">Transformer</span>
-        <h2>The Transformer: Attention Is All You Need</h2>
-      </a>
-    </li>
-    <li>
-      <a class="post" href="posts/yolo-explained.html">
-        <span class="tag">YOLO</span>
-        <h2>You Only Look Once: Real-Time Object Detection</h2>
-      </a>
-    </li>
-    <li>
-      <a class="post" href="posts/vit-explained.html">
-        <span class="tag">ViT</span>
-        <h2>Visual Transformers</h2>
-      </a>
-    </li>
-    <li>
-      <a class="post" href="posts/clip-explained.html">
-        <span class="tag">CLIP</span>
-        <h2>Contrastive Language-Image Pre-training</h2>
-      </a>
-    </li>
-    <li>
-      <a class="post" href="posts/rag-agentic-rag.html">
-        <span class="tag">RAG + Agentic RAG</span>
-        <h2>Retrieval-Augmented Generation and Agentic RAG</h2>
-      </a>
-    </li>
-    <li>
-      <a class="post" href="posts/activation-functions-explained.html">
-        <span class="tag">Activation Functions</span>
-        <h2>Activation Functions in Neural Networks</h2>
-      </a>
-    </li>
-  </ul>
+  <section>
+    <h2 class="section-title">Concepts</h2>
+    <p class="section-sub">Fundamentals, explained from first principles.</p>
+    <ul class="post-list">
+      <li>
+        <a class="post" href="posts/neural-networks-explained.html">
+          <span class="tag">Neural Networks</span>
+          <h3>Neural Networks &amp; Backpropagation</h3>
+        </a>
+      </li>
+      <li>
+        <a class="post" href="posts/cnn-explained.html">
+          <span class="tag">CNN</span>
+          <h3>Convolutional Neural Networks</h3>
+        </a>
+      </li>
+      <li>
+        <a class="post" href="posts/rnn-explained.html">
+          <span class="tag">RNN</span>
+          <h3>Recurrent Neural Networks</h3>
+        </a>
+      </li>
+      <li>
+        <a class="post" href="posts/transformer-explained.html">
+          <span class="tag">Transformer</span>
+          <h3>The Transformer: Attention Is All You Need</h3>
+        </a>
+      </li>
+      <li>
+        <a class="post" href="posts/yolo-explained.html">
+          <span class="tag">YOLO</span>
+          <h3>You Only Look Once: Real-Time Object Detection</h3>
+        </a>
+      </li>
+      <li>
+        <a class="post" href="posts/vit-explained.html">
+          <span class="tag">ViT</span>
+          <h3>Visual Transformers</h3>
+        </a>
+      </li>
+      <li>
+        <a class="post" href="posts/clip-explained.html">
+          <span class="tag">CLIP</span>
+          <h3>Contrastive Language-Image Pre-training</h3>
+        </a>
+      </li>
+      <li>
+        <a class="post" href="posts/rag-agentic-rag.html">
+          <span class="tag">RAG + Agentic RAG</span>
+          <h3>Retrieval-Augmented Generation and Agentic RAG</h3>
+        </a>
+      </li>
+      <li>
+        <a class="post" href="posts/activation-functions-explained.html">
+          <span class="tag">Activation Functions</span>
+          <h3>Activation Functions in Neural Networks</h3>
+        </a>
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <h2 class="section-title">Paper Reproductions</h2>
+    <p class="section-sub">Papers I've read and implemented from scratch, with my own experiment results and code.</p>
+    <ul class="post-list papers">
+      <li>
+        <a class="post" href="posts/fedavg-explained.html">
+          <span class="tag">FedAvg · 2017</span>
+          <h3>Federated Averaging — Communication-Efficient Learning of Deep Networks from Decentralized Data</h3>
+          <p>McMahan et al. Implemented 2NN + CNN on MNIST, IID/non-IID.</p>
+        </a>
+      </li>
+      <li>
+        <a class="post" href="posts/dlg-explained.html">
+          <span class="tag">DLG · 2019</span>
+          <h3>Deep Leakage from Gradients</h3>
+          <p>Zhu, Liu &amp; Han. Attacked my own FedAvg client to recover its training data.</p>
+        </a>
+      </li>
+    </ul>
+  </section>
 
   <footer>Updated as new topics are finished.</footer>
 
